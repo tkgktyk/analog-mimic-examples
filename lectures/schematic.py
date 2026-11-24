@@ -7,7 +7,7 @@ the module output AOUT is read on A2 (CH2).
 
 Uses mimic_parts.py of the Arduino library (analog-mimic-arduino/extras/schematics),
 from the working copy next to this repository:
-    python lectures/schematic.py    (pip install schemdraw)
+    uv run --project lectures python lectures/schematic.py
 """
 import sys
 import pathlib

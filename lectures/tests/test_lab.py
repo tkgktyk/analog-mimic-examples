@@ -57,7 +57,7 @@ def test_capture(fake):
     assert t[1] == pytest.approx(1e-4)
     assert ch1.max() == pytest.approx(3.5, abs=1e-3)
     assert ch1.min() == pytest.approx(1.5, abs=1e-3)
-    assert (ch2.max() - ch2.min()) / 2 == pytest.approx(1 / np.sqrt(2), abs=2e-3)
+    assert (ch2.max() - ch2.min()) / 2 == pytest.approx(1 / np.sqrt(2), abs=0.01)
     assert fake[0].sent[-1] == "scope capture 2000 2"
 
 

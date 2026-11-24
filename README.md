@@ -25,11 +25,11 @@ The `platformio.ini` at the root is for development. Open the root in VS Code, o
 The library is the working copy next to this repository (`../analog-mimic-arduino`).
 Sketch names (folder names) must be unique in the whole repository.
 
-結線図(`schematic.py` → `schematic.svg`)は schemdraw で描き、ライブラリの `extras/schematics/mimic_parts.py`(隣の作業コピー)を使います。スクリプトを変えたら `python <フォルダ>/schematic.py` で作り直してコミットします。
-The wiring diagrams (`schematic.py` → `schematic.svg`) are drawn with schemdraw and the `extras/schematics/mimic_parts.py` of the library (the working copy next to this repository). Regenerate and commit the SVG when the script changes.
+図はスクリプトから作ります:結線図(`schematic.py` → `schematic.svg`)と回路図(`circuit.py` → `circuit.svg`)は schemdraw とライブラリの `extras/schematics/mimic_parts.py`(隣の作業コピー)で、周波数特性の模式図(`response.py` → `response.svg`)は matplotlib(`lectures/tools/figures.py`)で描きます。スクリプトを変えたら `uv run --project lectures python <スクリプト>` で作り直し、SVG もコミットします。
+Figures are made by scripts: wiring diagrams (`schematic.py`) and circuit diagrams (`circuit.py`) with schemdraw and `extras/schematics/mimic_parts.py` of the library (the working copy next to this repository), frequency-response sketches (`response.py`) with matplotlib (`lectures/tools/figures.py`). Regenerate with `uv run --project lectures python <script>` and commit the SVG too.
 
-Python のテスト(偽の測定器で `mimiclab` と全部のノートブックを動かす):`cd lectures` → `uv run pytest`。GitHub Actions(`.github/workflows/ci.yml`)は、全部のスケッチのコンパイル(UNO R4 Minima / WiFi、Library Manager の AnalogMimic)、Python のテスト(Ubuntu / Windows)、結線図が最新かを確かめます。
-Python tests (mimiclab and every notebook against a fake instrument): `cd lectures`, then `uv run pytest`. GitHub Actions compiles every sketch (UNO R4 Minima / WiFi, AnalogMimic from the Library Manager), runs the Python tests (Ubuntu / Windows) and checks that the wiring diagrams are up to date.
+Python のテスト(偽の測定器で `mimiclab` と全部のノートブックを動かす):`cd lectures` → `uv run pytest`。GitHub Actions(`.github/workflows/ci.yml`)は、全部のスケッチのコンパイル(UNO R4 Minima / WiFi、Library Manager の AnalogMimic)、Python のテスト(Ubuntu / Windows)、図が最新かを確かめます。
+Python tests (mimiclab and every notebook against a fake instrument): `cd lectures`, then `uv run pytest`. GitHub Actions compiles every sketch (UNO R4 Minima / WiFi, AnalogMimic from the Library Manager), runs the Python tests (Ubuntu / Windows) and checks that the figures are up to date.
 
 ## ライセンス / License
 

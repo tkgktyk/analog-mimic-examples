@@ -34,9 +34,10 @@ jobs:
       - run: uv sync --locked
       - run: uv run --locked pytest
 
-  # The wiring diagrams (schematic.svg) are up to date with their scripts.
-  # The scripts use mimic_parts.py of the library, checked out next to this repository.
-  schematics:
+  # The figures (schematic.svg, circuit.svg, response.svg) are up to date with their
+  # scripts. The scripts use mimic_parts.py of the library, checked out next to this
+  # repository, and the versions of schemdraw / matplotlib locked in lectures/uv.lock.
+  figures:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -46,13 +47,13 @@ jobs:
         with:
           repository: tkgktyk/analog-mimic-arduino
           path: analog-mimic-arduino
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - run: pip install schemdraw==0.23
-      - name: Regenerate the diagrams
+      - uses: astral-sh/setup-uv@v7
+      - name: Regenerate the figures
         working-directory: analog-mimic-examples
         run: |
-          git ls-files '*schematic.py' | while read -r f; do python "$f"; done
+          uv sync --locked --project lectures
+          git ls-files '*schematic.py' '*circuit.py' '*response.py' | while read -r f; do
+            uv run --locked --project lectures python "$f"
+          done
           git status --porcelain
           test -z "$(git status --porcelain)"

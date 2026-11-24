@@ -3,8 +3,9 @@
 (proto 1) like the hardware, without an Arduino.
 
 The generator state is kept; a capture returns the generator wave on CH1 and, on CH2,
-the same wave through the first-order LPF / HPF when one is set (steady state of a
-sine), otherwise the input. Good enough to run the notebooks, not a model of the module.
+the same wave through a first-order LPF / HPF (a simple digital filter, settled) when
+one is set, otherwise the input. Good enough to run the notebooks, not a model of the
+module.
 """
 import numpy as np
 
@@ -94,22 +95,40 @@ class FakeSerial:
             return b"ok\n"
         return b"err unknown command (help)\n"
 
+    def wave_at(self, t):
+        """The generator output (V) at times t (s); phase 0 at t = 0."""
+        ph = (self.freq * t) % 1.0
+        if self.wave == "sine":
+            s = np.sin(2 * np.pi * ph)
+        elif self.wave == "square":
+            s = np.where(ph < 0.5, 1.0, -1.0)
+        elif self.wave == "triangle":
+            q = (ph + 0.25) % 1.0
+            s = np.where(q < 0.5, 4 * q - 1, 3 - 4 * q)
+        else:
+            s = np.zeros_like(t)
+        return self.offset + self.amp * s
+
     def capture(self, points, divider):
         fs = FS / divider
-        t = np.arange(points) / fs
-        w = 2 * np.pi * self.freq
-        if self.wave == "dc":
-            x = np.zeros(points)
-        else:
-            x = np.sin(w * t)
-        gain, phase = 1.0, 0.0
+        # Start a whole number of periods early, so that the filter is settled at t = 0
+        warm = 0
         if self.filter and self.freq > 0:
+            periods = int(np.ceil(10 / (2 * np.pi * self.filter[1]) * self.freq)) + 1
+            warm = int(round(periods / self.freq * fs))
+        t = (np.arange(warm + points) - warm) / fs
+        x = self.wave_at(t)
+        y = x.copy()
+        if self.filter:
             kind, fc = self.filter
-            r = self.freq / fc
-            h = 1 / (1 + 1j * r) if kind == "lpf" else 1j * r / (1 + 1j * r)
-            gain, phase = abs(h), np.angle(h)
-        y = gain * np.sin(w * t + phase) if self.wave != "dc" else x
-        codes = [np.clip(np.round((self.offset + self.amp * s) / VREF * ADC_FULL), 0, ADC_FULL - 1)
-                 for s in (x, y)]
+            a = 1 - np.exp(-2 * np.pi * fc / fs)  # first-order low-pass, around the offset
+            lp = np.empty_like(x)
+            acc = x[0]
+            for n, v in enumerate(x):
+                acc += a * (v - acc)
+                lp[n] = acc
+            y = lp if kind == "lpf" else x - lp + self.offset
+        x, y = x[warm:], y[warm:]
+        codes = [np.clip(np.round(v / VREF * ADC_FULL), 0, ADC_FULL - 1) for v in (x, y)]
         data = np.column_stack(codes).astype("<u2").tobytes()
         return f"ok bin {len(data)} 2 {points} {fs:.3f}\n".encode() + data + b"end\n"
