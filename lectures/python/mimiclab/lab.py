@@ -41,8 +41,8 @@ def _arg(x) -> str:
     return str(x)
 
 
-def _keys(text: str) -> dict:
-    """Parses "word key=value key=value" into {"key": value}; the first word is "_"."""
+def _keys(text: str, first: str = "name") -> dict:
+    """Parses "word key=value key=value" into {first: "word", "key": value, ...}."""
     out = {}
     for i, tok in enumerate(text.split()):
         if "=" in tok:
@@ -52,7 +52,7 @@ def _keys(text: str) -> dict:
             except ValueError:
                 out[k] = v
         elif i == 0:
-            out["_"] = tok
+            out[first] = tok
     return out
 
 
@@ -91,7 +91,7 @@ class MimicLab:
                                         "Is the MimicLab sketch written to the Arduino?")
                 time.sleep(0.3)
         info = _keys(reply)
-        if info.get("_") != "MimicLab":
+        if info.get("name") != "MimicLab":
             raise MimicLabError(f"Not a MimicLab: {reply}")
         if info.get("proto") != PROTOCOL:
             raise MimicLabError(f"Protocol {info.get('proto')} of the sketch, {PROTOCOL} of this "
@@ -147,7 +147,7 @@ class FunctionGenerator:
         self._lab = lab
 
     def _set(self, *args) -> dict:
-        return _keys(self._lab.command("fg " + " ".join(_arg(a) for a in args)))
+        return _keys(self._lab.command("fg " + " ".join(_arg(a) for a in args)), "wave")
 
     def sine(self, freq: float, amp: float, offset: float | None = None) -> dict:
         return self._set("sine", freq, amp, *([] if offset is None else [offset]))
@@ -162,7 +162,7 @@ class FunctionGenerator:
         return self._set("dc", volts)
 
     def status(self) -> dict:
-        return _keys(self._lab.command("fg"))
+        return _keys(self._lab.command("fg"), "wave")
 
 
 class Scope:

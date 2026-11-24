@@ -25,6 +25,9 @@ The `platformio.ini` at the root is for development. Open the root in VS Code, o
 The library is the working copy next to this repository (`../analog-mimic-arduino`).
 Sketch names (folder names) must be unique in the whole repository.
 
+結線図(`schematic.py` → `schematic.svg`)は schemdraw で描き、ライブラリの `extras/schematics/mimic_parts.py`(隣の作業コピー)を使います。スクリプトを変えたら `python <フォルダ>/schematic.py` で作り直してコミットします。
+The wiring diagrams (`schematic.py` → `schematic.svg`) are drawn with schemdraw and the `extras/schematics/mimic_parts.py` of the library (the working copy next to this repository). Regenerate and commit the SVG when the script changes.
+
 ## ライセンス / License
 
 | 対象 / Files | ライセンス / License |
