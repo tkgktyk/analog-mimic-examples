@@ -87,6 +87,10 @@ class FakeSerial:
                 kind = m[15:]
                 q = float(t[3]) if len(t) > 3 else (0.7071 if kind in ("lpf", "hpf") else 1.0)
                 self.mode = ("biquad", kind, float(t[2]), q)
+            elif m == "setintegrator":
+                self.mode = ("integ", float(t[2]), float(t[3]) if len(t) > 3 else 0.0)
+            elif m == "setdifferentiator":
+                self.mode = ("diff", float(t[2]), float(t[3]) if len(t) > 3 else 10.0)
             elif m == "setpga":
                 self.mode = ("pga", float(t[2]))
             elif m == "setvref":
@@ -123,9 +127,15 @@ class FakeSerial:
         kind = self.mode[0]
         # Start a whole number of periods early, so that a filter is settled at t = 0
         warm = 0
-        if kind in ("lpf", "hpf", "apf", "biquad") and self.freq > 0:
-            fc, q = (self.mode[1], 0.5) if kind != "biquad" else (self.mode[2], self.mode[3])
-            tau = max(1.0, 2 * q) / (2 * np.pi * fc)
+        if kind in ("lpf", "hpf", "apf", "biquad", "integ", "diff") and self.freq > 0:
+            if kind == "biquad":
+                tau = max(1.0, 2 * self.mode[3]) / (2 * np.pi * self.mode[2])
+            elif kind == "integ":
+                tau = self.mode[2] * 1e-6 if self.mode[2] > 0 else 0.0
+            elif kind == "diff":
+                tau = self.mode[2] * 1e-6
+            else:
+                tau = 1 / (2 * np.pi * self.mode[1])
             periods = int(np.ceil(10 * tau * self.freq)) + 1
             warm = int(round(periods / self.freq * fs))
         t = (np.arange(warm + points) - warm) / fs
@@ -143,6 +153,10 @@ class FakeSerial:
             y = {"lpf": lp, "hpf": u - lp, "apf": 2 * lp - u}[kind]
         elif kind == "biquad":
             y = biquad(u, *self.mode[1:], fs)
+        elif kind == "integ":
+            y = integrate(u, self.mode[1] * 1e-6, self.mode[2] * 1e-6, fs)
+        elif kind == "diff":
+            y = differentiate(u, self.mode[1] * 1e-6, self.mode[2] * 1e-6, fs)
         else:
             y = u
         y = np.clip(self.vref + y, 0.1, VREF - 0.1)  # headroom of the module output
@@ -167,4 +181,38 @@ def biquad(u, kind, fc, q, fs):
         y0 = b[0] * x0 + b[1] * x1 + b[2] * x2 - a[1] * y1 - a[2] * y2
         x2, x1, y2, y1 = x1, x0, y1, y0
         y[n] = y0
+    return y
+
+
+def integrate(u, tau_i, tau_leak, fs):
+    """Integrator of the module: m += c (K u - m) with a leak, m += u Ts / tau_i without."""
+    ts = 1 / fs
+    y = np.empty_like(u)
+    m = 0.0
+    if tau_leak > 0:
+        c = 1 - np.exp(-ts / tau_leak)
+        k = tau_leak / tau_i
+        for n, v in enumerate(u):
+            m += c * (k * v - m)
+            m = min(max(m, -2.5), 2.5)
+            y[n] = m
+    else:
+        for n, v in enumerate(u):
+            m += v * ts / tau_i
+            m = min(max(m, -2.5), 2.5)
+            y[n] = m
+    return y
+
+
+def differentiate(u, tau_d, tau_lim, fs):
+    """Differentiator of the module: m += c (K (u[n] - u[n-1]) - m), K = tau_d fs."""
+    k = tau_d * fs
+    c = 1 - np.exp(-1 / (fs * tau_lim)) if tau_lim > 0 else 1.0
+    y = np.empty_like(u)
+    m = 0.0
+    last = u[0]
+    for n, v in enumerate(u):
+        m += c * (k * (v - last) - m)
+        last = v
+        y[n] = m
     return y

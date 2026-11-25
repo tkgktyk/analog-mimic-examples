@@ -393,6 +393,18 @@ class Mimic:
         """Second-order notch (band-stop) filter, centre fc in Hz."""
         self.call("setFilterBiquadNotch", fc, q)
 
+    def integrator(self, integration_time_us: float, leak_time_us: float = 0.0):
+        """Integrator: output = Vref + (1 / tau_i) x integral of (input - Vref) dt.
+        A leak (resistor across the capacitor) makes it a low-pass with a DC gain of
+        leak / integration time. Times in microseconds. The output is kept when the
+        settings change; switch to another mode (e.g. bypass()) to reset it."""
+        self.call("setIntegrator", integration_time_us, leak_time_us)
+
+    def differentiator(self, differentiation_time_us: float, limit_time_us: float = 10.0):
+        """Differentiator: output = Vref + tau_d x d(input)/dt, with the gain limited to
+        tau_d / limit above 1 / (2 pi limit). Times in microseconds."""
+        self.call("setDifferentiator", differentiation_time_us, limit_time_us)
+
     def vref(self, volts: float):
         """Reference voltage (signal ground) of the module, 2.5 V by default."""
         self.call("setVref", volts)

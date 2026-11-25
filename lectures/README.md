@@ -71,5 +71,6 @@ jupyter lab
 | [1 増幅](01_amplifier/) | [1-1 増幅回路(非反転増幅・反転増幅)](01_amplifier/01_pga.ipynb) |
 | [2 1 次フィルタ](02_filter1st/) | [2-1 ローパスフィルタ(LPF)](02_filter1st/01_lpf.ipynb)、[2-2 ハイパスフィルタ(HPF)](02_filter1st/02_hpf.ipynb)、[2-3 周波数特性を測る(ボード線図)](02_filter1st/03_bode.ipynb)、[2-4 オールパスフィルタ(APF)](02_filter1st/04_apf.ipynb) |
 | [3 2 次フィルタ](03_filter2nd/) | [3-1 ローパスフィルタ(サレン・キー)](03_filter2nd/01_sk_lpf.ipynb)、[3-2 ハイパスフィルタ(サレン・キー)](03_filter2nd/02_sk_hpf.ipynb)、[3-3 バンドパスフィルタ(多重帰還)](03_filter2nd/03_mfb_bpf.ipynb)、[3-4 ノッチフィルタ(ツイン T)](03_filter2nd/04_notch.ipynb)、[3-5 状態変数フィルタ](03_filter2nd/05_svf.ipynb) |
+| [4 時間の演算](04_time/) | [4-1 積分器](04_time/01_integrator.ipynb)、[4-2 微分器](04_time/02_differentiator.ipynb) |
 
 最初に 0 章の「測定器の使い方」をやってください。

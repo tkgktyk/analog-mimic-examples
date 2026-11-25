@@ -88,7 +88,8 @@ def biquad(x, kind, q):
     return num / d
 
 
-def gain_family_sketch(x, curves, asymptotes=(), ylim=(-60, 15), title=None, mark=None):
+def gain_family_sketch(x, curves, asymptotes=(), ylim=(-60, 15), title=None, mark=None,
+                       xlabel="Frequency  f / fc", legend_loc="lower left"):
     """Gains [dB] of several responses (curves: list of (label, h)) with dashed
     asymptotes and a vertical line at fc. mark: (y_dB, text) to put a point at fc."""
     fig, ax = plt.subplots(figsize=(6, 3.4))
@@ -103,9 +104,9 @@ def gain_family_sketch(x, curves, asymptotes=(), ylim=(-60, 15), title=None, mar
     ax.set_xscale("log")
     ax.set_xlim(x[0], x[-1])
     ax.set_ylim(*ylim)
-    ax.set_xlabel("Frequency  f / fc")
+    ax.set_xlabel(xlabel)
     ax.set_ylabel("Gain [dB]")
-    ax.legend(loc="lower left", fontsize=9)
+    ax.legend(loc=legend_loc, fontsize=9)
     if title:
         ax.set_title(title)
     fig.tight_layout()
