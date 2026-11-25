@@ -6,7 +6,7 @@ Lectures and projects with the Analog Mimic module.
 | | 内容 / Contents | 言葉 / Language |
 |---|---|---|
 | [`lectures/`](lectures/) | 講義:アナログ信号処理と回路ブロックを、Arduino と Python のノートブックで学ぶ。回路がわからない人はここから | 日本語 |
-| [`projects/`](projects/) | Projects: things to build with sensors and the module | English |
+| [`projects/`](projects/) | Projects: things to build with sensors and the module(準備中 / coming soon) | English |
 
 モジュールの API の例(デモ)は Arduino ライブラリ [analog-mimic-arduino](https://github.com/tkgktyk/analog-mimic-arduino) の `examples/` にあります。
 API examples (demos) are in the `examples/` of the Arduino library [analog-mimic-arduino](https://github.com/tkgktyk/analog-mimic-arduino).
@@ -14,7 +14,7 @@ API examples (demos) are in the `examples/` of the Arduino library [analog-mimic
 ## 必要なもの / Requirements
 
 - Arduino **UNO R4 Minima**(推奨 / recommended)。UNO R4 WiFi は対応を想定していますが未確認です(not tested yet)。**UNO R3 では動きません**(DAC がない / no DAC)。
-- Analog Mimic(MIMIC01、ファーム / firmware fw-20261123 以降 / or later)
+- Analog Mimic(MIMIC01、ファーム / firmware fw-20261125 以降 / or later)
 - Arduino IDE と、Library Manager の **AnalogMimic 0.2.0 以降** / or later
 
 ## 開発者向け / For developers
