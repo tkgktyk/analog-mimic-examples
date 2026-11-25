@@ -105,6 +105,29 @@ def test_biquad(fake):
     assert r.gain[0] == pytest.approx(1, rel=0.03)
 
 
+def test_nonlinear(fake):
+    lab = MimicLab()
+    lab.fg.sine(50, 1.0)
+    lab.mimic.comparator_schmitt(3.0, 2.0)
+    assert fake[0].sent[-1] == "mimic setComparatorSchmitt 3 2"
+    t, ch1, ch2 = lab.scope.capture(400)          # one period
+    assert set(np.round(ch2, 1)) <= {0.0, 5.0}    # digital output
+    assert ch2[ch1 > 3.05].min() > 4.9 and ch2[ch1 < 1.95].max() < 0.1
+    lab.mimic.comparator_window(3.0, 2.0)
+    t, ch1, ch2 = lab.scope.capture(400)
+    assert ch2[(ch1 > 2.1) & (ch1 < 2.9)].max() < 0.1
+    lab.mimic.clipper(3.0, 2.0)
+    t, ch1, ch2 = lab.scope.capture(400)
+    assert ch2.max() == pytest.approx(3.0, abs=0.01) and ch2.min() == pytest.approx(2.0, abs=0.01)
+    lab.mimic.rectifier_full("neg")
+    assert fake[0].sent[-1] == "mimic setRectifierFull neg"
+    t, ch1, ch2 = lab.scope.capture(400)
+    assert ch2.max() == pytest.approx(2.5, abs=0.01) and ch2.min() == pytest.approx(1.5, abs=0.01)
+    lab.mimic.peak_hold()
+    t, ch1, ch2 = lab.scope.capture(400)
+    assert ch2.min() == pytest.approx(3.5, abs=0.01)  # held at the peak
+
+
 def test_port_busy(monkeypatch):
     import serial
     import mimiclab.lab

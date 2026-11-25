@@ -111,3 +111,23 @@ def gain_family_sketch(x, curves, asymptotes=(), ylim=(-60, 15), title=None, mar
         ax.set_title(title)
     fig.tight_layout()
     return fig
+
+
+def transfer_axes(titles, lim=(0.0, 5.0)):
+    """Axes for input-output characteristics (input voltage across, output up), one per
+    title, square, from lim[0] to lim[1] V."""
+    fig, axes = plt.subplots(1, len(titles), figsize=(3.3 * len(titles) + 0.4, 3.6))
+    axes = np.atleast_1d(axes)
+    for ax, title in zip(axes, titles):
+        ax.set_xlim(*lim)
+        ax.set_ylim(lim[0] - 0.25, lim[1] + 0.25)
+        ax.set_aspect("equal")
+        ax.set_xlabel("Input [V]")
+        ax.set_title(title)
+    axes[0].set_ylabel("Output [V]")
+    return fig, axes
+
+
+def arrow(ax, start, end, color="C0"):
+    """An arrow head along a line, to show the direction of travel."""
+    ax.annotate("", end, start, arrowprops=dict(arrowstyle="-|>", color=color, lw=2))

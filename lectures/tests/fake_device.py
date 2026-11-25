@@ -3,9 +3,10 @@
 (proto 1) like the hardware, without an Arduino.
 
 The generator state is kept; a capture returns the generator wave on CH1 and, on CH2,
-the same wave through the mode that is set (PGA around Vref, first-order LPF / HPF /
-APF as a simple digital filter, settled; otherwise the input), limited to 0.1 - 4.9 V. Good enough to run the notebooks, not a model of the
-module.
+the same wave through the mode that is set (PGA, filters, integrator, differentiator,
+comparators with the digital output 0 V / VDD, clippers, rectifiers, envelope follower;
+filters and states settled from a few periods before t = 0), limited to 0.1 - 4.9 V.
+Good enough to run the notebooks, not a model of the module.
 """
 import numpy as np
 
@@ -91,6 +92,14 @@ class FakeSerial:
                 self.mode = ("integ", float(t[2]), float(t[3]) if len(t) > 3 else 0.0)
             elif m == "setdifferentiator":
                 self.mode = ("diff", float(t[2]), float(t[3]) if len(t) > 3 else 10.0)
+            elif m in ("setcomparatorschmitt", "setcomparatorwindow", "setclipper", "setsoftclipper"):
+                self.mode = (m[3:], float(t[2]), float(t[3]))
+            elif m in ("setrectifierhalf", "setrectifierfull"):
+                self.mode = (m[3:], len(t) > 2 and t[2].lower().startswith("neg"))
+            elif m == "setenvelopefollower":
+                self.mode = ("envelope", float(t[2]), len(t) > 3 and t[3].lower().startswith("neg"))
+            elif m == "setpeakhold":
+                self.mode = ("envelope", 0.0, len(t) > 2 and t[2].lower().startswith("neg"))
             elif m == "setpga":
                 self.mode = ("pga", float(t[2]))
             elif m == "setvref":
@@ -127,13 +136,17 @@ class FakeSerial:
         kind = self.mode[0]
         # Start a whole number of periods early, so that a filter is settled at t = 0
         warm = 0
-        if kind in ("lpf", "hpf", "apf", "biquad", "integ", "diff") and self.freq > 0:
+        if kind in ("lpf", "hpf", "apf", "biquad", "integ", "diff", "envelope", "comparatorschmitt") and self.freq > 0:
             if kind == "biquad":
                 tau = max(1.0, 2 * self.mode[3]) / (2 * np.pi * self.mode[2])
             elif kind == "integ":
                 tau = self.mode[2] * 1e-6 if self.mode[2] > 0 else 0.0
             elif kind == "diff":
                 tau = self.mode[2] * 1e-6
+            elif kind == "envelope":
+                tau = self.mode[1] * 1e-6
+            elif kind == "comparatorschmitt":
+                tau = 0.0
             else:
                 tau = 1 / (2 * np.pi * self.mode[1])
             periods = int(np.ceil(10 * tau * self.freq)) + 1
@@ -157,9 +170,20 @@ class FakeSerial:
             y = integrate(u, self.mode[1] * 1e-6, self.mode[2] * 1e-6, fs)
         elif kind == "diff":
             y = differentiate(u, self.mode[1] * 1e-6, self.mode[2] * 1e-6, fs)
+        elif kind in ("clipper", "softclipper"):
+            y = clip(x, *self.mode[1:], soft=kind == "softclipper") - self.vref
+        elif kind == "rectifierhalf":
+            y = np.minimum(u, 0) if self.mode[1] else np.maximum(u, 0)
+        elif kind == "rectifierfull":
+            y = -np.abs(u) if self.mode[1] else np.abs(u)
+        elif kind == "envelope":
+            y = -envelope(-u, self.mode[1] * 1e-6, fs) if self.mode[2] else envelope(u, self.mode[1] * 1e-6, fs)
         else:
             y = u
-        y = np.clip(self.vref + y, 0.1, VREF - 0.1)  # headroom of the module output
+        if kind.startswith("comparator"):  # digital output: 0 V / VDD
+            y = comparator(x, kind[10:], *self.mode[1:])
+        else:
+            y = np.clip(self.vref + y, 0.1, VREF - 0.1)  # headroom of the module output
         x, y = x[warm:], y[warm:]
         codes = [np.clip(np.round(v / VREF * ADC_FULL), 0, ADC_FULL - 1) for v in (x, y)]
         data = np.column_stack(codes).astype("<u2").tobytes()
@@ -181,6 +205,44 @@ def biquad(u, kind, fc, q, fs):
         y0 = b[0] * x0 + b[1] * x1 + b[2] * x2 - a[1] * y1 - a[2] * y2
         x2, x1, y2, y1 = x1, x0, y1, y0
         y[n] = y0
+    return y
+
+
+def comparator(x, kind, upper, lower):
+    """Comparator of the module (absolute volts in and out): window HIGH outside
+    lower - upper; Schmitt HIGH above upper, LOW below lower, otherwise unchanged."""
+    if kind == "window":
+        return np.where((x > upper) | (x < lower), VREF, 0.0)
+    y = np.empty_like(x)
+    state = 0.0
+    for n, v in enumerate(x):
+        if v > upper:
+            state = VREF
+        elif v < lower:
+            state = 0.0
+        y[n] = state
+    return y
+
+
+def clip(x, upper, lower, soft=False):
+    """Clipper of the module: hard, or the cubic soft clip (gain 1 at the centre)."""
+    if not soft:
+        return np.clip(x, lower, upper)
+    c, h = (upper + lower) / 2, (upper - lower) / 2
+    d = x - c
+    y = c + d - 4 * d ** 3 / (27 * h * h)
+    return np.where(d >= 1.5 * h, upper, np.where(d <= -1.5 * h, lower, y))
+
+
+def envelope(mag, tau, fs):
+    """Envelope follower of the module: follows the peak of mag (>= 0), decays with tau
+    (0: holds the peak)."""
+    d = np.exp(-1 / (fs * tau)) if tau > 0 else 1.0
+    y = np.empty_like(mag)
+    e = 0.0
+    for n, v in enumerate(np.maximum(mag, 0)):
+        e = v if v > e else e * d
+        y[n] = e
     return y
 
 

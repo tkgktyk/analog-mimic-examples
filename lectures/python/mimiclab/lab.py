@@ -405,6 +405,48 @@ class Mimic:
         tau_d / limit above 1 / (2 pi limit). Times in microseconds."""
         self.call("setDifferentiator", differentiation_time_us, limit_time_us)
 
+    def comparator(self, threshold: float):
+        """Comparator (digital output, 0 / VDD): HIGH when the input is above the
+        threshold (V). The same as comparator_schmitt(threshold, threshold)."""
+        self.call("setComparatorSchmitt", threshold, threshold)
+
+    def comparator_schmitt(self, upper: float, lower: float):
+        """Schmitt trigger (digital output): HIGH above upper, LOW below lower (V),
+        otherwise unchanged (hysteresis)."""
+        self.call("setComparatorSchmitt", upper, lower)
+
+    def comparator_window(self, upper: float, lower: float):
+        """Window comparator (digital output): HIGH when the input is above upper or
+        below lower (V), LOW inside the window."""
+        self.call("setComparatorWindow", upper, lower)
+
+    def clipper(self, upper: float, lower: float):
+        """Hard clipper: passes the input between lower and upper (V), clips outside."""
+        self.call("setClipper", upper, lower)
+
+    def soft_clipper(self, upper: float, lower: float):
+        """Soft clipper: smooth saturation toward lower and upper (V), like diodes."""
+        self.call("setSoftClipper", upper, lower)
+
+    def rectifier_half(self, polarity: str = "pos"):
+        """Half-wave rectifier at Vref: max(input, Vref) ("pos") or min ("neg")."""
+        self.call("setRectifierHalf", polarity)
+
+    def rectifier_full(self, polarity: str = "pos"):
+        """Full-wave rectifier: Vref + |input - Vref| ("pos") or Vref - |...| ("neg")."""
+        self.call("setRectifierFull", polarity)
+
+    def envelope(self, decay_time_us: float, polarity: str = "pos"):
+        """Envelope follower: follows the peak of the input above Vref ("pos") or below
+        ("neg") and decays toward Vref with the time constant (us, the RC). The output is
+        on the side of the peak: Vref + peak ("pos"), Vref - peak ("neg")."""
+        self.call("setEnvelopeFollower", decay_time_us, polarity)
+
+    def peak_hold(self, polarity: str = "pos"):
+        """Peak hold (envelope follower without decay). The peak is kept when the
+        settings change; switch to another mode (e.g. bypass()) to reset it."""
+        self.call("setPeakHold", polarity)
+
     def vref(self, volts: float):
         """Reference voltage (signal ground) of the module, 2.5 V by default."""
         self.call("setVref", volts)
