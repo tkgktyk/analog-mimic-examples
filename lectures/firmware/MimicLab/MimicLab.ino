@@ -28,7 +28,7 @@
 
 // ---- Settings -------------------------------------------------------------------------
 
-constexpr char VERSION[] = "0.1.0";
+constexpr char VERSION[] = "0.1.1";
 constexpr int PROTOCOL = 1;
 constexpr uint32_t BAUD = 1000000;   // ignored by the UNO R4 Minima (native USB); used by the WiFi
 constexpr float TICK_HZ = 20000.0f;  // DAC update and ADC sampling rate
@@ -36,7 +36,13 @@ constexpr float VREF_V = 5.0f;       // full scale of the DAC and the ADC (AVCC)
 constexpr int DAC_BITS = 12;
 constexpr int ADC_BITS = 14;
 constexpr uint16_t DAC_MAX = (1u << DAC_BITS) - 1;
-constexpr uint16_t MAX_POINTS = 4000;  // per channel (2 x 4000 x 2 bytes = 16 KB)
+// Points per channel (2 channels x 2 bytes each). The core of the UNO R4 WiFi keeps more RAM
+// for itself, so its buffer is smaller; the lectures use at most 2000 points.
+#if defined(ARDUINO_UNOWIFIR4)
+constexpr uint16_t MAX_POINTS = 2000;  // 8 KB
+#else
+constexpr uint16_t MAX_POINTS = 4000;  // 16 KB
+#endif
 
 volatile uint16_t *const DAC_DATA = (uint16_t *)0x4005E000;  // DAC12 DADR0 (pin A0)
 
@@ -206,8 +212,8 @@ void fail(const char *s) { Serial.print("err "); Serial.print(s); Serial.print('
 void cmdId() {
   char date[12] = "none";
   if (mimicReady) snprintf(date, sizeof(date), "%08lx", (unsigned long)mimic.getBuildDate());
-  snprintf(out, sizeof(out), "ok MimicLab proto=%d ver=%s fs=%lu dac=%d adc=%d mimic=%s",
-           PROTOCOL, VERSION, (unsigned long)TICK_HZ, DAC_BITS, ADC_BITS, date);
+  snprintf(out, sizeof(out), "ok MimicLab proto=%d ver=%s fs=%lu dac=%d adc=%d maxpts=%u mimic=%s",
+           PROTOCOL, VERSION, (unsigned long)TICK_HZ, DAC_BITS, ADC_BITS, (unsigned)MAX_POINTS, date);
   Serial.print(out);
   printKey("vref", VREF_V, 3);
   Serial.print('\n');
@@ -288,7 +294,11 @@ void cmdScope() {
       sync = true;
     } else { fail("trigger must be sync or free"); return; }
   }
-  if (points < 1 || points > MAX_POINTS) { fail("points out of range (1 - 4000)"); return; }
+  if (points < 1 || points > MAX_POINTS) {
+    snprintf(out, sizeof(out), "points out of range (1 - %u)", (unsigned)MAX_POINTS);
+    fail(out);
+    return;
+  }
   if (divider < 1 || divider > 65535) { fail("divider out of range (1 - 65535)"); return; }
 
   // Timeout: one FG period (waiting for phase 0) + the capture + margin

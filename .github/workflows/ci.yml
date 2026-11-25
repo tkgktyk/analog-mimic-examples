@@ -7,6 +7,7 @@ jobs:
   sketches:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false  # build every board even if one fails
       matrix:
         fqbn: [arduino:renesas_uno:minima, arduino:renesas_uno:unor4wifi]
     steps:

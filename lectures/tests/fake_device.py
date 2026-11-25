@@ -26,6 +26,8 @@ class FakeSerial:
         # ("bypass",), ("pga", gain), ("lpf" | "hpf" | "apf", fc), ("biquad", kind, fc, q)
         self.mode = ("bypass",)
         self.vref = VREF / 2
+        # The smaller buffer of the UNO R4 WiFi, so that every notebook fits both boards
+        self.max_points = 2000
 
     # ---- serial.Serial interface ----
 
@@ -62,7 +64,8 @@ class FakeSerial:
     def answer(self, t):
         cmd = t[0].lower()
         if cmd == "id":
-            return b"ok MimicLab proto=1 ver=0.1.0 fs=20000 dac=12 adc=14 mimic=20261123 vref=5.000\n"
+            return (b"ok MimicLab proto=1 ver=0.1.1 fs=20000 dac=12 adc=14 maxpts=%d mimic=20261123 vref=5.000\n"
+                    % self.max_points)
         if cmd == "fg":
             if len(t) == 1:
                 return self.fg_line()
@@ -132,6 +135,8 @@ class FakeSerial:
         return self.offset + self.amp * s
 
     def capture(self, points, divider):
+        if not 1 <= points <= self.max_points:
+            return b"err points out of range (1 - %d)\n" % self.max_points
         fs = FS / divider
         kind = self.mode[0]
         # Start a whole number of periods early, so that a filter is settled at t = 0

@@ -100,6 +100,8 @@ class MimicLab:
         self.vref = float(self.info["vref"])
         self.fs = float(self.info["fs"])
         self.adc_bits = int(self.info["adc"])
+        # Points per channel of one capture: 4000 (UNO R4 Minima), 2000 (UNO R4 WiFi)
+        self.max_points = int(self.info.get("maxpts", 4000))
         self.fg = FunctionGenerator(self)
         self.scope = Scope(self)
         self.mimic = Mimic(self)
@@ -190,9 +192,10 @@ class MimicLab:
                 self.fg.sine(f, amp, offset)
             time.sleep(settle)
             span = periods / f
-            divider = max(1, math.ceil(span * self.fs / 4000))
+            limit = min(2000, self.max_points)  # the same on every board
+            divider = max(1, math.ceil(span * self.fs / limit))
             fs = self.fs / divider
-            points = min(4000, max(100, math.ceil(span * fs)))
+            points = min(limit, max(100, math.ceil(span * fs)))
             t, ch1, ch2 = self.scope.capture(points, fs=fs)
             a1, p1, _ = fit_sine(t, ch1, f)
             a2, p2, _ = fit_sine(t, ch2, f)
@@ -259,7 +262,8 @@ class Scope:
         """Captures both channels.
 
         Args:
-            points: Points per channel (1 - 4000).
+            points: Points per channel (1 - lab.max_points: 4000 on the UNO R4 Minima,
+                2000 on the UNO R4 WiFi; the lectures use at most 2000).
             fs: Sampling frequency in Hz: 20000 divided by an integer (20000, 10000, 5000, ...).
                 None for 20000.
             sync: True starts at phase 0 of the generator (the same waveform every time),
