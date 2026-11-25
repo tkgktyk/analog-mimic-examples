@@ -9,7 +9,7 @@ Arduino UNO R4 を**測定器**(信号発生器と 2ch のオシロ)にして、
 
 - PC(Windows / macOS / Linux)
 - Arduino **UNO R4 Minima**(推奨)。UNO R4 WiFi は対応を想定していますが未確認です。UNO R3 では動きません(DAC がないため)。
-- Analog Mimic(MIMIC01、ファーム fw-20261123 以降)
+- Analog Mimic(MIMIC01、ファーム fw-20261125 以降)
 - ジャンパーワイヤー、ブレッドボード
 
 ## 結線(全講義で同じ)
