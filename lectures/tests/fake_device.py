@@ -3,8 +3,8 @@
 (proto 1) like the hardware, without an Arduino.
 
 The generator state is kept; a capture returns the generator wave on CH1 and, on CH2,
-the same wave through a first-order LPF / HPF (a simple digital filter, settled) when
-one is set, otherwise the input. Good enough to run the notebooks, not a model of the
+the same wave through the mode that is set (PGA around Vref, first-order LPF / HPF /
+APF as a simple digital filter, settled; otherwise the input), limited to 0.1 - 4.9 V. Good enough to run the notebooks, not a model of the
 module.
 """
 import numpy as np
@@ -22,7 +22,9 @@ class FakeSerial:
         self.buf = b"# MimicLab ready\n"
         self.sent = []  # command lines received, for the tests
         self.wave, self.freq, self.amp, self.offset = "dc", 0.0, 0.0, VREF / 2
-        self.filter = None  # ("lpf" | "hpf", fc)
+        # ("bypass",), ("pga", gain), ("lpf" | "hpf" | "apf", fc), ("biquad", kind, fc, q)
+        self.mode = ("bypass",)
+        self.vref = VREF / 2
 
     # ---- serial.Serial interface ----
 
@@ -78,12 +80,19 @@ class FakeSerial:
             m = t[1].lower()
             if m == "list":
                 return b"# setFilter1stLPF (1 args)\n# getStatus getInputVolts\nok\n"
-            if m == "setfilter1stlpf":
-                self.filter = ("lpf", float(t[2]))
-            elif m == "setfilter1sthpf":
-                self.filter = ("hpf", float(t[2]))
+            filters = {"setfilter1stlpf": "lpf", "setfilter1sthpf": "hpf", "setfilter1stapf": "apf"}
+            if m in filters:
+                self.mode = (filters[m], float(t[2]))
+            elif m.startswith("setfilterbiquad") and m[15:] in ("lpf", "hpf", "bpf", "notch"):
+                kind = m[15:]
+                q = float(t[3]) if len(t) > 3 else (0.7071 if kind in ("lpf", "hpf") else 1.0)
+                self.mode = ("biquad", kind, float(t[2]), q)
+            elif m == "setpga":
+                self.mode = ("pga", float(t[2]))
+            elif m == "setvref":
+                self.vref = float(t[2])
             elif m.startswith("set"):
-                self.filter = None
+                self.mode = ("bypass",)
             elif m == "getinputvolts":
                 return f"ok {self.offset:.5f}\n".encode()
             elif m == "getbuilddate":
@@ -111,24 +120,51 @@ class FakeSerial:
 
     def capture(self, points, divider):
         fs = FS / divider
-        # Start a whole number of periods early, so that the filter is settled at t = 0
+        kind = self.mode[0]
+        # Start a whole number of periods early, so that a filter is settled at t = 0
         warm = 0
-        if self.filter and self.freq > 0:
-            periods = int(np.ceil(10 / (2 * np.pi * self.filter[1]) * self.freq)) + 1
+        if kind in ("lpf", "hpf", "apf", "biquad") and self.freq > 0:
+            fc, q = (self.mode[1], 0.5) if kind != "biquad" else (self.mode[2], self.mode[3])
+            tau = max(1.0, 2 * q) / (2 * np.pi * fc)
+            periods = int(np.ceil(10 * tau * self.freq)) + 1
             warm = int(round(periods / self.freq * fs))
         t = (np.arange(warm + points) - warm) / fs
-        x = self.wave_at(t)
-        y = x.copy()
-        if self.filter:
-            kind, fc = self.filter
-            a = 1 - np.exp(-2 * np.pi * fc / fs)  # first-order low-pass, around the offset
-            lp = np.empty_like(x)
-            acc = x[0]
-            for n, v in enumerate(x):
+        x = np.clip(self.wave_at(t), 0, VREF)  # the DAC
+        u = x - self.vref  # the module works on the input relative to Vref
+        if kind == "pga":
+            y = self.mode[1] * u
+        elif kind in ("lpf", "hpf", "apf"):
+            a = 1 - np.exp(-2 * np.pi * self.mode[1] / fs)  # first-order low-pass
+            lp = np.empty_like(u)
+            acc = u[0]
+            for n, v in enumerate(u):
                 acc += a * (v - acc)
                 lp[n] = acc
-            y = lp if kind == "lpf" else x - lp + self.offset
+            y = {"lpf": lp, "hpf": u - lp, "apf": 2 * lp - u}[kind]
+        elif kind == "biquad":
+            y = biquad(u, *self.mode[1:], fs)
+        else:
+            y = u
+        y = np.clip(self.vref + y, 0.1, VREF - 0.1)  # headroom of the module output
         x, y = x[warm:], y[warm:]
         codes = [np.clip(np.round(v / VREF * ADC_FULL), 0, ADC_FULL - 1) for v in (x, y)]
         data = np.column_stack(codes).astype("<u2").tobytes()
         return f"ok bin {len(data)} 2 {points} {fs:.3f}\n".encode() + data + b"end\n"
+
+
+def biquad(u, kind, fc, q, fs):
+    """Second-order filter of the module (bilinear transform of the analog prototype
+    (b2 s^2 + b1 s + b0) / (s^2 + s/Q + 1), s normalized by 2 pi fc, prewarped at fc)."""
+    b2, b1, b0 = {"lpf": (0, 0, 1), "hpf": (1, 0, 0), "bpf": (0, 1 / q, 0), "notch": (1, 0, 1)}[kind]
+    k = np.tan(np.pi * fc / fs)
+    zm, zpm, zp = np.array([1, -2, 1]), np.array([1, 0, -1]), np.array([1, 2, 1])
+    b = b2 * zm + b1 * k * zpm + b0 * k * k * zp
+    a = zm + (k / q) * zpm + k * k * zp
+    b, a = b / a[0], a / a[0]
+    y = np.zeros_like(u)
+    x1 = x2 = y1 = y2 = 0.0
+    for n, x0 in enumerate(u):
+        y0 = b[0] * x0 + b[1] * x1 + b[2] * x2 - a[1] * y1 - a[2] * y2
+        x2, x1, y2, y1 = x1, x0, y1, y0
+        y[n] = y0
+    return y

@@ -18,7 +18,7 @@ def test_protocol_mismatch(fake, monkeypatch):
     def old_id(self, t):
         return b"ok MimicLab proto=99 ver=9 fs=20000 dac=12 adc=14 mimic=none vref=5.000\n"
     monkeypatch.setattr(fake_device.FakeSerial, "answer", old_id)
-    with pytest.raises(MimicLabError, match="Protocol"):
+    with pytest.raises(MimicLabError, match="proto"):
         MimicLab()
 
 
@@ -71,3 +71,70 @@ def test_unknown_command(fake):
     lab = MimicLab()
     with pytest.raises(MimicLabError, match="unknown command"):
         lab.command("nothing")
+
+
+def test_pga_and_vref(fake):
+    lab = MimicLab()
+    lab.fg.sine(100, 0.5)
+    lab.mimic.pga(-2)
+    t, ch1, ch2 = lab.scope.capture(400)
+    assert ch2.max() == pytest.approx(3.5, abs=0.01)
+    assert np.corrcoef(ch1, ch2)[0, 1] < -0.99  # inverted
+    lab.mimic.vref(2.0)
+    assert fake[0].sent[-1] == "mimic setVref 2"
+
+
+def test_frequency_response(fake):
+    lab = MimicLab()
+    lab.mimic.filter1st_lpf(100)
+    r = lab.frequency_response([10, 100, 1000], settle=0)
+    assert r.gain[1] == pytest.approx(0.707, abs=0.02)
+    assert r.phase[1] == pytest.approx(-45, abs=3)
+    assert r.gain_db[2] == pytest.approx(-20, abs=1)
+
+
+def test_biquad(fake):
+    lab = MimicLab()
+    lab.mimic.biquad_lpf(100, 2)
+    r = lab.frequency_response([100, 1000], settle=0)
+    assert r.gain[0] == pytest.approx(2, rel=0.03)       # Q at fc
+    assert r.phase[0] == pytest.approx(-90, abs=3)
+    assert r.gain_db[1] == pytest.approx(-40, abs=1.5)   # 40 dB / decade
+    lab.mimic.biquad_bpf(100, 5)
+    r = lab.frequency_response([100], settle=0)
+    assert r.gain[0] == pytest.approx(1, rel=0.03)
+
+
+def test_port_busy(monkeypatch):
+    import serial
+    import mimiclab.lab
+
+    def busy(*args, **kwargs):
+        raise serial.SerialException("could not open port 'COM4': PermissionError")
+    monkeypatch.setattr(mimiclab.lab.serial, "Serial", busy)
+    with pytest.raises(MimicLabError, match="lab.close"):
+        MimicLab("COM4")
+
+
+def test_waveforms_and_phase(fake):
+    from mimiclab import match_phase, plot_waveforms
+    lab = MimicLab()
+    lab.mimic.biquad_hpf(100, 2)
+    r = lab.frequency_response([10, 100, 1000], settle=0, monitor=True)
+    assert len(r.waves) == 3 and len(r.waves[0]) == 3
+    fig = plot_waveforms(r)
+    assert len(fig.axes) == 4
+    theory = np.array([178.8, 90.0, 1.2])
+    assert np.allclose(match_phase(r.phase - 360, theory), r.phase)
+
+
+def test_shared_monitor_and_folded(fake, capsys):
+    from mimiclab import Monitor, plot_waveforms
+    lab = MimicLab()
+    mon = Monitor()
+    for q in (0.5, 2):
+        lab.mimic.biquad_lpf(100, q)
+        r = lab.frequency_response([50, 100], settle=0, monitor=mon, label=f"Q = {q}: ")
+    assert mon.label == "Q = 2: "
+    mon.close()
+    assert plot_waveforms(r, collapsed=True) is None

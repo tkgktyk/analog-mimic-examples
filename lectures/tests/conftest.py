@@ -24,4 +24,6 @@ def fake(monkeypatch):
 
     monkeypatch.setattr(mimiclab.lab.serial, "Serial", make)
     monkeypatch.setattr(mimiclab.lab, "find_port", lambda: "FAKE")
+    # No waiting for the settling of the hardware (frequency_response)
+    monkeypatch.setattr(mimiclab.lab.time, "sleep", lambda seconds: None)
     return made

@@ -8,14 +8,32 @@ then the binary data (uint16 little endian, channels interleaved), then a line "
 
 from __future__ import annotations
 
+import math
 import time
+from typing import NamedTuple
 
 import numpy as np
 import serial
 from serial.tools import list_ports
 
+from .analysis import fit_sine
+from .plot import Monitor
+
 PROTOCOL = 1
 ARDUINO_VID = 0x2341
+
+
+class Response(NamedTuple):
+    """Frequency response: frequencies [Hz], gain (output / input), phase [deg] and the
+    captured waveforms, a list of (t, ch1, ch2) for each frequency."""
+    freq: np.ndarray
+    gain: np.ndarray
+    phase: np.ndarray
+    waves: list | None = None
+
+    @property
+    def gain_db(self):
+        return 20 * np.log10(self.gain)
 
 
 class MimicLabError(RuntimeError):
@@ -27,10 +45,12 @@ def find_port() -> str:
     ports = [p for p in list_ports.comports() if p.vid == ARDUINO_VID]
     if len(ports) == 1:
         return ports[0].device
-    names = ", ".join(f"{p.device} ({p.description})" for p in list_ports.comports()) or "none"
+    names = ", ".join(f"{p.device} ({p.description})" for p in list_ports.comports()) or "なし"
     if not ports:
-        raise MimicLabError(f"No Arduino found. Serial ports: {names}")
-    raise MimicLabError(f"Several Arduinos found; give the port, e.g. MimicLab('COM5'). Ports: {names}")
+        raise MimicLabError(f"Arduino が見つかりません。USB ケーブルを確かめてください。"
+                            f"シリアルポート: {names}")
+    raise MimicLabError(f"Arduino が複数つながっています。MimicLab('COM5') のようにポートを"
+                        f"指定してください。シリアルポート: {names}")
 
 
 def _arg(x) -> str:
@@ -68,7 +88,14 @@ class MimicLab:
     def __init__(self, port: str | None = None, baud: int = 1_000_000, timeout: float = 2.0):
         self.port = port or find_port()
         self.timeout = timeout
-        self._ser = serial.Serial(self.port, baud, timeout=timeout)
+        try:
+            self._ser = serial.Serial(self.port, baud, timeout=timeout)
+        except serial.SerialException as e:
+            raise MimicLabError(
+                f"{self.port} を開けません。ほかのプログラムが使っている可能性があります。"
+                "前のノートブックで lab.close() を実行するか、JupyterLab の左の"
+                "「実行中のカーネルとターミナル」から前のノートブックのカーネルを止めてください。"
+                "PlatformIO や Arduino IDE のシリアルモニタも閉じてください。") from e
         self.info = self._connect()
         self.vref = float(self.info["vref"])
         self.fs = float(self.info["fs"])
@@ -87,15 +114,18 @@ class MimicLab:
                 break
             except MimicLabError:
                 if time.monotonic() > deadline:
-                    raise MimicLabError(f"No answer from MimicLab on {self.port}. "
-                                        "Is the MimicLab sketch written to the Arduino?")
+                    self._ser.close()
+                    raise MimicLabError(f"{self.port} の Arduino が答えません。MimicLab の"
+                                        "スケッチを書き込んであるか確かめてください。")
                 time.sleep(0.3)
         info = _keys(reply)
         if info.get("name") != "MimicLab":
-            raise MimicLabError(f"Not a MimicLab: {reply}")
+            self._ser.close()
+            raise MimicLabError(f"MimicLab ではありません: {reply}")
         if info.get("proto") != PROTOCOL:
-            raise MimicLabError(f"Protocol {info.get('proto')} of the sketch, {PROTOCOL} of this "
-                                "library: update the sketch or the library")
+            self._ser.close()
+            raise MimicLabError(f"スケッチの命令の版(proto {info.get('proto')})と mimiclab の版"
+                                f"(proto {PROTOCOL})が合いません。スケッチか mimiclab を新しくしてください。")
         return info
 
     # ---- Low level ----
@@ -121,6 +151,60 @@ class MimicLab:
         if reply.startswith("err"):
             raise MimicLabError(f"{line!r}: {reply[3:].strip()}")
         raise MimicLabError(f"{line!r}: unexpected reply {reply!r}")
+
+    def frequency_response(self, freqs, amp: float = 1.0, offset: float | None = None,
+                           periods: int = 5, settle: float = 0.3,
+                           monitor=False, label: str = "") -> Response:
+        """Measures the response of the module with sine waves (a Bode plot).
+
+        For each frequency, the generator sends a sine, waits `settle` seconds, captures
+        at least `periods` periods of CH1 (input) and CH2 (output) and fits a sine of
+        that frequency to both. The generator is left at the last frequency.
+
+        Args:
+            freqs: Frequencies [Hz]; up to about 2 kHz is meaningful (20 kHz sampling).
+            amp: Amplitude (peak) of the sine [V].
+            offset: Centre of the sine [V]; None for 2.5 V.
+            periods: Periods captured at each frequency (more for less noise).
+            settle: Seconds to wait after changing the frequency.
+            monitor: True shows the waveforms while measuring (in a notebook), like
+                watching an oscilloscope; the last one stays. A Monitor() can be given
+                instead, to use one plot for several measurements (close it after).
+            label: Text put before the frequency in the title of the monitor.
+
+        Returns:
+            Response(freq, gain, phase, waves): phase of the output from the input, in
+            degrees, continuous over the frequencies (it can go below -180); waves: the
+            captured (t, ch1, ch2) at each frequency (plot_waveforms() draws them).
+        """
+        freqs = np.asarray(freqs, dtype=float)
+        gains, phases, waves = [], [], []
+        own = monitor is True
+        mon = Monitor() if own else (monitor or None)
+        if mon is not None:
+            mon.label = label
+        for f in freqs:
+            if offset is None:
+                self.fg.sine(f, amp)
+            else:
+                self.fg.sine(f, amp, offset)
+            time.sleep(settle)
+            span = periods / f
+            divider = max(1, math.ceil(span * self.fs / 4000))
+            fs = self.fs / divider
+            points = min(4000, max(100, math.ceil(span * fs)))
+            t, ch1, ch2 = self.scope.capture(points, fs=fs)
+            a1, p1, _ = fit_sine(t, ch1, f)
+            a2, p2, _ = fit_sine(t, ch2, f)
+            gains.append(a2 / a1)
+            phases.append((p2 - p1 + 180) % 360 - 180)
+            waves.append((t, ch1, ch2))
+            if mon is not None:
+                mon.update(f, t, ch1, ch2, gains[-1], phases[-1])
+        if own:
+            mon.close()
+        phase = np.degrees(np.unwrap(np.radians(phases)))
+        return Response(freqs, np.array(gains), phase, waves)
 
     def close(self):
         self._ser.close()
@@ -278,7 +362,7 @@ class Mimic:
         self.call("setBypassDSP")
 
     def pga(self, gain: float):
-        """Amplifier: output = gain x (input - Vref) + Vref."""
+        """Amplifier: output = Vref + gain x (input - Vref); a negative gain inverts."""
         self.call("setPGA", gain)
 
     def filter1st_lpf(self, fc: float):
@@ -290,7 +374,7 @@ class Mimic:
         self.call("setFilter1stHPF", fc)
 
     def filter1st_apf(self, fc: float):
-        """First-order all-pass filter: gain 1, phase -180 to 0 degrees (-90 at fc)."""
+        """First-order all-pass filter: gain 1, phase 0 to -180 degrees (-90 at fc)."""
         self.call("setFilter1stAPF", fc)
 
     def biquad_lpf(self, fc: float, q: float | None = None):

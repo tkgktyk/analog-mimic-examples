@@ -8,7 +8,10 @@
     t, ch1, ch2 = lab.scope.capture(2000) # 2000 points at 20 kHz, in V
 """
 
-from .lab import MimicLab, MimicLabError, find_port
+from .analysis import fit_sine, match_phase
+from .lab import MimicLab, MimicLabError, Response, find_port
+from .plot import Monitor, plot_waveforms
 
-__all__ = ["MimicLab", "MimicLabError", "find_port"]
+__all__ = ["MimicLab", "MimicLabError", "Response", "find_port", "fit_sine", "match_phase",
+           "plot_waveforms", "Monitor"]
 __version__ = "0.1.0"
