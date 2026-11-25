@@ -26,7 +26,7 @@ class FakeSerial:
         # ("bypass",), ("pga", gain), ("lpf" | "hpf" | "apf", fc), ("biquad", kind, fc, q)
         self.mode = ("bypass",)
         self.vref = VREF / 2
-        # The smaller buffer of the UNO R4 WiFi, so that every notebook fits both boards
+        # The buffer of the sketch: every notebook must fit it
         self.max_points = 2000
 
     # ---- serial.Serial interface ----

@@ -36,13 +36,9 @@ constexpr float VREF_V = 5.0f;       // full scale of the DAC and the ADC (AVCC)
 constexpr int DAC_BITS = 12;
 constexpr int ADC_BITS = 14;
 constexpr uint16_t DAC_MAX = (1u << DAC_BITS) - 1;
-// Points per channel (2 channels x 2 bytes each). The core of the UNO R4 WiFi keeps more RAM
-// for itself, so its buffer is smaller; the lectures use at most 2000 points.
-#if defined(ARDUINO_UNOWIFIR4)
-constexpr uint16_t MAX_POINTS = 2000;  // 8 KB
-#else
-constexpr uint16_t MAX_POINTS = 4000;  // 16 KB
-#endif
+// Points per channel (2 channels x 2 bytes each: 8 KB). The cores of the UNO R4 (1.6.0)
+// keep 8 KB of the 32 KB RAM for the heap, and 4000 points (16 KB) no longer fit.
+constexpr uint16_t MAX_POINTS = 2000;
 
 volatile uint16_t *const DAC_DATA = (uint16_t *)0x4005E000;  // DAC12 DADR0 (pin A0)
 

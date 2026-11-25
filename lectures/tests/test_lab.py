@@ -12,7 +12,7 @@ def test_connect(fake):
     assert lab.info["name"] == "MimicLab"
     assert lab.info["mimic"] == 20261123
     assert lab.vref == 5.0 and lab.fs == 20000.0 and lab.adc_bits == 14
-    assert lab.max_points == 2000   # the fake has the buffer of the UNO R4 WiFi
+    assert lab.max_points == 2000
     with pytest.raises(MimicLabError, match="out of range"):
         lab.scope.capture(2001)
 
