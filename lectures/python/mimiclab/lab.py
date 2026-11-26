@@ -9,6 +9,7 @@ then the binary data (uint16 little endian, channels interleaved), then a line "
 from __future__ import annotations
 
 import math
+import threading
 import time
 from typing import NamedTuple
 
@@ -88,6 +89,9 @@ class MimicLab:
     def __init__(self, port: str | None = None, baud: int = 1_000_000, timeout: float = 2.0):
         self.port = port or find_port()
         self.timeout = timeout
+        # One command (or capture) at a time: the live scope sends from a thread
+        self._lock = threading.RLock()
+        self._lives = []
         try:
             self._ser = serial.Serial(self.port, baud, timeout=timeout)
         except serial.SerialException as e:
@@ -144,8 +148,9 @@ class MimicLab:
 
     def command(self, line: str) -> str:
         """Sends one command and returns the text after "ok" (raises MimicLabError on "err")."""
-        self._ser.write((line + "\n").encode("ascii"))
-        reply = self._readline()
+        with self._lock:
+            self._ser.write((line + "\n").encode("ascii"))
+            reply = self._readline()
         if reply == "ok":
             return ""
         if reply.startswith("ok "):
@@ -210,6 +215,8 @@ class MimicLab:
         return Response(freqs, np.array(gains), phase, waves)
 
     def close(self):
+        for live in list(self._lives):
+            live.stop()
         self._ser.close()
 
     def __enter__(self):
@@ -280,26 +287,48 @@ class Scope:
             cmd += " sync" if sync else " free"
 
         ser = self._lab._ser
-        old = ser.timeout
-        # Capture time, one generator period (waiting for phase 0) and the transfer
-        ser.timeout = self._lab.timeout + points * divider / base + 1.5
-        try:
-            header = self._lab.command(cmd).split()
-            if len(header) != 5 or header[0] != "bin":
-                raise MimicLabError(f"unexpected reply: {' '.join(header)}")
-            nbytes, nch, npts, fs_actual = int(header[1]), int(header[2]), int(header[3]), float(header[4])
-            data = ser.read(nbytes)
-            if len(data) != nbytes:
-                raise MimicLabError(f"capture: {len(data)} of {nbytes} bytes received")
-            if self._lab._readline() != "end":
-                raise MimicLabError("capture: no 'end' after the data")
-        finally:
-            ser.timeout = old
+        with self._lab._lock:
+            old = ser.timeout
+            # Capture time, one generator period (waiting for phase 0) and the transfer
+            ser.timeout = self._lab.timeout + points * divider / base + 1.5
+            try:
+                header = self._lab.command(cmd).split()
+                if len(header) != 5 or header[0] != "bin":
+                    raise MimicLabError(f"unexpected reply: {' '.join(header)}")
+                nbytes, nch, npts, fs_actual = int(header[1]), int(header[2]), int(header[3]), float(header[4])
+                data = ser.read(nbytes)
+                if len(data) != nbytes:
+                    raise MimicLabError(f"capture: {len(data)} of {nbytes} bytes received")
+                if self._lab._readline() != "end":
+                    raise MimicLabError("capture: no 'end' after the data")
+            finally:
+                ser.timeout = old
 
         codes = np.frombuffer(data, dtype="<u2").reshape(npts, nch)
         volts = codes * (self._lab.vref / (1 << self._lab.adc_bits))
         t = np.arange(npts) / fs_actual
         return t, volts[:, 0], volts[:, 1]
+
+    def live(self, points: int = 2000, fs: float | None = None, mode: str = "free",
+             scale: str = "fixed", frames: int | None = None):
+        """Shows both channels again and again in one plot, like an oscilloscope (JupyterLab).
+
+        Buttons: Free run (capture again and again) / Single (one capture; "Capture" takes
+        another), 0 - 5 V / Auto (vertical scale), Stop. The legend shows the mean and the
+        frequency of each channel. The captures start at once (no trigger). Other cells
+        can still use the instrument while it runs; lab.close() stops it.
+
+        Args:
+            points, fs: As capture() (2000 points at 20 kHz: 0.1 s).
+            mode: "free" or "single" at the start.
+            scale: "fixed" (0 - 5 V) or "auto" at the start.
+            frames: Capture this many frames, show the last one and return (no buttons).
+
+        Returns:
+            The LiveScope; .stop() ends it, .data is the last (t, ch1, ch2).
+        """
+        from .live import LiveScope
+        return LiveScope(self._lab, points, fs, mode, scale, frames)
 
 
 class Mimic:

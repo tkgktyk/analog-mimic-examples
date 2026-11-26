@@ -64,7 +64,7 @@ class FakeSerial:
     def answer(self, t):
         cmd = t[0].lower()
         if cmd == "id":
-            return (b"ok MimicLab proto=1 ver=0.1.1 fs=20000 dac=12 adc=14 maxpts=%d mimic=20261123 vref=5.000\n"
+            return (b"ok MimicLab proto=1 ver=0.1.2 fs=20000 dac=12 adc=14 maxpts=%d mimic=20261123 vref=5.000\n"
                     % self.max_points)
         if cmd == "fg":
             if len(t) == 1:

@@ -30,6 +30,7 @@ def test_notebooks_found():
 @pytest.mark.parametrize("path", NOTEBOOKS, ids=lambda p: p.relative_to(LECTURES).as_posix())
 def test_notebook_runs(fake, path, monkeypatch):
     monkeypatch.chdir(path.parent)
+    monkeypatch.setenv("MIMICLAB_LIVE_FRAMES", "2")  # lab.scope.live(): two frames, no thread
     nb = json.loads(path.read_text(encoding="utf-8"))
     scope = {"__name__": "__main__"}
     for i, cell in enumerate(nb["cells"]):

@@ -28,7 +28,7 @@
 
 // ---- Settings -------------------------------------------------------------------------
 
-constexpr char VERSION[] = "0.1.1";
+constexpr char VERSION[] = "0.1.2";
 constexpr int PROTOCOL = 1;
 constexpr uint32_t BAUD = 1000000;   // ignored by the UNO R4 Minima (native USB); used by the WiFi
 constexpr float TICK_HZ = 20000.0f;  // DAC update and ADC sampling rate
@@ -73,6 +73,7 @@ uint8_t adcCh1 = 0, adcCh2 = 0;  // ADC channels (ANxxx) of A1 and A2
 // ---- Interrupt: FG and scope ----------------------------------------------------------
 
 static inline void readAdc(uint16_t *dst) {
+  while (R_ADC0->ADCSR_b.ADST) {}  // a discarded scan (onTick) has ended long ago
   R_ADC0->ADCSR_b.ADST = 1;  // single scan of the two channels
   while (R_ADC0->ADCSR_b.ADST) {}
   dst[0] = R_ADC0->ADDR[adcCh1];
@@ -107,6 +108,7 @@ void onTick(timer_callback_args_t *) {
   if (code > DAC_MAX) code = DAC_MAX;
   *DAC_DATA = (uint16_t)code;
 
+  bool sampled = false;
   switch (capState) {
     case CAP_ARMED:
       if (capSync && !phaseZero) break;
@@ -118,6 +120,7 @@ void onTick(timer_callback_args_t *) {
     case CAP_RUN:
       if (capDivCount == 0) {
         readAdc(&captureBuf[2 * capIndex]);
+        sampled = true;
         if (++capIndex >= capPoints) capState = CAP_DONE;
       }
       if (++capDivCount >= capDivider) capDivCount = 0;
@@ -125,6 +128,12 @@ void onTick(timer_callback_args_t *) {
     default:
       break;
   }
+  // When no point is taken at this tick, start a scan anyway and discard it (no waiting):
+  // the ADC loads the inputs the same way all the time, at every sampling rate and between
+  // captures. Each scan connects the sampling capacitor (charged to the other channel) to
+  // the pin, so a high-impedance source (a finger) drifts while the ADC is idle and jumps
+  // at the start of the next capture. The scan ends long before the next tick.
+  if (!sampled) R_ADC0->ADCSR_b.ADST = 1;
 }
 
 // ---- Setup ----------------------------------------------------------------------------

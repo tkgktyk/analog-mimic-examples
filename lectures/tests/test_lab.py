@@ -164,3 +164,41 @@ def test_shared_monitor_and_folded(fake, capsys):
     assert mon.label == "Q = 2: "
     mon.close()
     assert plot_waveforms(r, collapsed=True) is None
+
+
+def test_measure():
+    from mimiclab.live import measure
+    t = np.arange(2000) / 20000
+    mean, f = measure(t, 2.5 + np.sin(2 * np.pi * 50 * t))
+    assert abs(mean - 2.5) < 1e-3 and abs(f - 50) < 0.1
+    noisy = 2.5 + 0.01 * np.sin(2 * np.pi * 60 * t) + 0.001 * np.random.default_rng(1).standard_normal(2000)
+    assert abs(measure(t, noisy)[1] - 60) < 1           # 20 mV peak to peak
+    assert measure(t, 3.3 + 0.001 * np.sin(2 * np.pi * 50 * t))[1] is None  # DC
+    assert measure(t, 2.5 + np.sin(2 * np.pi * 5 * t))[1] is None          # half a period
+
+
+def test_live_frames(fake):
+    lab = MimicLab()
+    live = lab.scope.live(frames=2)
+    assert len(live.data[1]) == 2000 and not lab._lives
+    assert fake[0].sent.count("scope capture 2000 1 free") == 2
+    with pytest.raises(ValueError):
+        lab.scope.live(mode="run", frames=1)
+
+
+def test_live_thread(fake):
+    import time
+    lab = MimicLab()
+    lab.fg.sine(100, 1.0)
+    live = lab.scope.live()           # thread and buttons (no kernel: the widgets do nothing)
+    deadline = time.monotonic() + 5
+    while fake[0].sent.count("scope capture 2000 1 free") < 3 and time.monotonic() < deadline:
+        lab.fg.sine(100, 1.0)         # other commands while it runs (the lock)
+    assert fake[0].sent.count("scope capture 2000 1 free") >= 3
+    live._scale_w.value = "auto"      # redraw with the last data
+    live._mode_w.value = "single"
+    live.stop()
+    assert not live._thread.is_alive() and not lab._lives
+    live2 = lab.scope.live(scale="auto")
+    lab.close()                       # stops the live scope
+    assert not live2._thread.is_alive()
