@@ -504,6 +504,49 @@ class Mimic:
         (0 - 4095 samples, up to 20.475 ms)."""
         self.call("setDigitalDelay", int(round(samples)))
 
+    # Signal sources and modulators (experimental modes of the library 0.2: the sketch
+    # MimicLab 0.1.4 or later). Waveforms: "sine", "triangle", "square", "sawtooth".
+
+    def constant_voltage(self, volts: float):
+        """Constant voltage source: the output stays at volts (V) whatever the input."""
+        self.call("setConstantVoltage", volts)
+
+    def oscillator(self, freq: float, amplitude: float, waveform: str = "sine"):
+        """Oscillator (function generator): Vref + amplitude x wave(2 pi freq t). Every
+        waveform starts at Vref and rises; the phase continues when the settings change."""
+        self.call("setOscillator", freq, amplitude, waveform)
+
+    def vco(self, center_freq: float, hz_per_volt: float, amplitude: float, waveform: str = "sine"):
+        """Voltage-controlled oscillator: frequency = center_freq + hz_per_volt x
+        (input - Vref), limited to 0 - 100 kHz."""
+        self.call("setVco", center_freq, hz_per_volt, amplitude, waveform)
+
+    def am(self, carrier_freq: float, carrier_amplitude: float, depth_per_volt: float,
+           waveform: str = "sine"):
+        """AM modulator: Vref + carrier_amplitude x (1 + depth_per_volt x (input - Vref))
+        x carrier. depth_per_volt = 1 gives 100 % modulation at 1 V."""
+        self.call("setAmModulator", carrier_freq, carrier_amplitude, depth_per_volt, waveform)
+
+    def ring(self, carrier_freq: float, gain: float = 1.0, waveform: str = "sine"):
+        """Ring (balanced, DSB) modulator: Vref + gain x (input - Vref) x carrier."""
+        self.call("setRingModulator", carrier_freq, gain, waveform)
+
+    def pwm(self, carrier_freq: float, full_scale: float, waveform: str = "triangle"):
+        """PWM modulator (digital output): HIGH while the input is above the carrier;
+        duty 0 % at Vref - full_scale, 50 % at Vref, 100 % at Vref + full_scale.
+        waveform: "triangle" (both edges move) or "sawtooth" (one edge fixed)."""
+        self.call("setPwmModulator", carrier_freq, full_scale, waveform)
+
+    def vf(self, hz_per_volt: float, zero_freq: float = 0.0):
+        """V/F converter (digital output, 50 % square): frequency = zero_freq +
+        hz_per_volt x (input - Vref), limited to 0 - 100 kHz (HIGH at 0 Hz)."""
+        self.call("setVfConverter", hz_per_volt, zero_freq)
+
+    def noise(self, amplitude: float, color: str = "white"):
+        """Noise generator (input not used): "white" is uniform within +/-amplitude (rms
+        amplitude / sqrt 3); "pink" falls by 3 dB per octave, rms amplitude / 3."""
+        self.call("setNoise", amplitude, color)
+
     def vref(self, volts: float):
         """Reference voltage (signal ground) of the module, 2.5 V by default."""
         self.call("setVref", volts)

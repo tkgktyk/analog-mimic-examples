@@ -9,9 +9,10 @@
 """
 
 from .analysis import fit_sine, match_phase
+from .live import measure
 from .lab import MimicLab, MimicLabError, Response, find_port
 from .plot import Monitor, plot_waveforms
 
 __all__ = ["MimicLab", "MimicLabError", "Response", "find_port", "fit_sine", "match_phase",
-           "plot_waveforms", "Monitor"]
+           "plot_waveforms", "Monitor", "measure"]
 __version__ = "0.1.0"

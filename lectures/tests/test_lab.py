@@ -226,3 +226,34 @@ def test_time_modes(fake):
     assert fake[0].sent[-1] == "mimic setDigitalDelay 1000"
     t, ch1, ch2 = lab.scope.capture(2000)
     assert np.mean(np.abs(ch2[100:] - ch1[:-100]) < 0.01) > 0.99   # 100 points later (but the edges)
+
+
+def test_sources(fake):
+    lab = MimicLab()
+    lab.mimic.oscillator(100, 1.0, "triangle")
+    assert fake[0].sent[-1] == "mimic setOscillator 100 1 triangle"
+    t, ch1, ch2 = lab.scope.capture(2000)
+    assert abs(ch2.max() - 3.5) < 0.01 and abs(ch2.min() - 1.5) < 0.01
+    lab.mimic.constant_voltage(1.2)
+    assert abs(lab.scope.capture(100)[2].mean() - 1.2) < 0.01
+    lab.fg.dc(3.0)                                    # 0.5 V above Vref
+    lab.mimic.vco(1000, 200, 1.0, "square")           # 1100 Hz
+    t, ch1, ch2 = lab.scope.capture(2000)
+    rising = np.flatnonzero(np.diff(np.sign(ch2 - 2.5)) > 0)
+    assert abs((len(rising) - 1) / (t[rising[-1]] - t[rising[0]]) - 1100) < 15
+    lab.mimic.pwm(100, 1.0)                           # duty 75 % at Vref + 0.5 V
+    assert abs((lab.scope.capture(2000)[2] > 2.5).mean() - 0.75) < 0.02
+    lab.mimic.vf(1000)                                # 500 Hz
+    t, ch1, ch2 = lab.scope.capture(2000)
+    assert abs(np.count_nonzero(np.diff((ch2 > 2.5).astype(int)) > 0) - 50) <= 1
+    lab.fg.sine(50, 1.0)
+    lab.mimic.am(1000, 1.0, 0.5)
+    lab.mimic.ring(1000)
+    t, ch1, ch2 = lab.scope.capture(2000)
+    assert ch2.max() < 3.51 and ch2.min() > 1.49
+    lab.mimic.noise(1.0)
+    v = lab.scope.capture(2000)[2]
+    assert abs(v.std() - 1 / np.sqrt(3)) < 0.03
+    lab.mimic.noise(1.0, "pink")
+    assert fake[0].sent[-1] == "mimic setNoise 1 pink"
+    assert abs(lab.scope.capture(2000)[2].std() - 1 / 3) < 0.03

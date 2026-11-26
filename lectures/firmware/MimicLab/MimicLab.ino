@@ -29,7 +29,7 @@
 
 // ---- Settings -------------------------------------------------------------------------
 
-constexpr char VERSION[] = "0.1.3";
+constexpr char VERSION[] = "0.1.4";
 constexpr int PROTOCOL = 1;
 constexpr uint32_t BAUD = 1000000;   // ignored by the UNO R4 Minima (native USB); used by the WiFi
 constexpr float TICK_HZ = 20000.0f;  // DAC update and ADC sampling rate
@@ -198,8 +198,15 @@ char out[96];
 
 int32_t voltsToDac(float v) { return (int32_t)lroundf(v / VREF_V * (DAC_MAX + 1)); }
 
-// A number, or a keyword: pos / neg (polarity), on / off, true / false
+// A number, or a keyword: pos / neg (polarity), on / off, true / false,
+// sine / triangle / square / sawtooth (oscillator waveform), white / pink (noise color)
 bool parseArg(const char *s, float *v) {
+  if (!strcasecmp(s, "sine")) { *v = MIMIC_OSC_WAVE_SINE; return true; }
+  if (!strcasecmp(s, "triangle")) { *v = MIMIC_OSC_WAVE_TRIANGLE; return true; }
+  if (!strcasecmp(s, "square")) { *v = MIMIC_OSC_WAVE_SQUARE; return true; }
+  if (!strcasecmp(s, "sawtooth")) { *v = MIMIC_OSC_WAVE_SAWTOOTH; return true; }
+  if (!strcasecmp(s, "white")) { *v = MIMIC_NOISE_WHITE; return true; }
+  if (!strcasecmp(s, "pink")) { *v = MIMIC_NOISE_PINK; return true; }
   if (!strcasecmp(s, "pos") || !strcasecmp(s, "positive")) { *v = MIMIC_POLARITY_POSITIVE; return true; }
   if (!strcasecmp(s, "neg") || !strcasecmp(s, "negative")) { *v = MIMIC_POLARITY_NEGATIVE; return true; }
   if (!strcasecmp(s, "on") || !strcasecmp(s, "true")) { *v = 1; return true; }
@@ -389,6 +396,17 @@ const MimicMethod MIMIC_METHODS[] = {
   { "setTrackAndHold", 1, 2, [](const float *a, int n) { n > 1 ? mimic.setTrackAndHold(a[0], a[1]) : mimic.setTrackAndHold(a[0]); } },
   { "setSlewRateLimiter", 1, 1, [](const float *a, int) { mimic.setSlewRateLimiter(a[0]); } },
   { "setDigitalDelay", 1, 1, [](const float *a, int) { mimic.setDigitalDelay(U16(a[0])); } },
+  // Signal sources and modulators (experimental in the library 0.2)
+  { "setOscillator", 2, 3, [](const float *a, int n) { n > 2 ? mimic.setOscillator(a[0], a[1], U8(a[2])) : mimic.setOscillator(a[0], a[1]); } },
+  { "setVco", 3, 4, [](const float *a, int n) { n > 3 ? mimic.setVco(a[0], a[1], a[2], U8(a[3])) : mimic.setVco(a[0], a[1], a[2]); } },
+  { "setAmModulator", 3, 4, [](const float *a, int n) { n > 3 ? mimic.setAmModulator(a[0], a[1], a[2], U8(a[3])) : mimic.setAmModulator(a[0], a[1], a[2]); } },
+  { "setRingModulator", 1, 3, [](const float *a, int n) {
+      if (n > 2) mimic.setRingModulator(a[0], a[1], U8(a[2]));
+      else if (n > 1) mimic.setRingModulator(a[0], a[1]);
+      else mimic.setRingModulator(a[0]); } },
+  { "setPwmModulator", 2, 3, [](const float *a, int n) { n > 2 ? mimic.setPwmModulator(a[0], a[1], U8(a[2])) : mimic.setPwmModulator(a[0], a[1]); } },
+  { "setVfConverter", 1, 2, [](const float *a, int n) { n > 1 ? mimic.setVfConverter(a[0], a[1]) : mimic.setVfConverter(a[0]); } },
+  { "setNoise", 1, 2, [](const float *a, int n) { n > 1 ? mimic.setNoise(a[0], U8(a[1])) : mimic.setNoise(a[0]); } },
 };
 #undef U8
 #undef U16

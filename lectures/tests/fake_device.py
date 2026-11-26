@@ -65,7 +65,7 @@ class FakeSerial:
     def answer(self, t):
         cmd = t[0].lower()
         if cmd == "id":
-            return (b"ok MimicLab proto=1 ver=0.1.3 fs=20000 dac=12 adc=14 maxpts=%d mimic=20261123 vref=5.000\n"
+            return (b"ok MimicLab proto=1 ver=0.1.4 fs=20000 dac=12 adc=14 maxpts=%d mimic=20261123 vref=5.000\n"
                     % self.max_points)
         if cmd == "fg":
             if len(t) == 1:
@@ -116,6 +116,25 @@ class FakeSerial:
                 self.mode = ("slew", step * VREF / 32768 * MODULE_FS)        # V/s
             elif m == "setdigitaldelay":
                 self.mode = ("delay", min(int(float(t[2])), 4095) / MODULE_FS)
+            elif m == "setconstantvoltage":
+                self.mode = ("const", float(t[2]))
+            elif m in ("setoscillator", "setvco", "setammodulator", "setringmodulator", "setpwmmodulator"):
+                a = [x for x in t[2:]]
+                wave_of = lambda w, default: w.lower() if w and w.lower() in WAVES else default  # noqa: E731
+                if m == "setoscillator":
+                    self.mode = ("osc", float(a[0]), 0.0, float(a[1]), wave_of(a[2] if len(a) > 2 else "", "sine"))
+                elif m == "setvco":
+                    self.mode = ("osc", float(a[0]), float(a[1]), float(a[2]), wave_of(a[3] if len(a) > 3 else "", "sine"))
+                elif m == "setammodulator":
+                    self.mode = ("am", float(a[0]), float(a[1]), float(a[1]) * float(a[2]), wave_of(a[3] if len(a) > 3 else "", "sine"))
+                elif m == "setringmodulator":
+                    self.mode = ("am", float(a[0]), 0.0, float(a[1]) if len(a) > 1 else 1.0, wave_of(a[2] if len(a) > 2 else "", "sine"))
+                else:
+                    self.mode = ("pwm", float(a[0]), float(a[1]), wave_of(a[2] if len(a) > 2 else "", "triangle"))
+            elif m == "setvfconverter":
+                self.mode = ("vf", float(t[3]) if len(t) > 3 else 0.0, float(t[2]))
+            elif m == "setnoise":
+                self.mode = ("noise", float(t[2]), (t[3].lower() if len(t) > 3 else "white"))
             elif m == "setpga":
                 self.mode = ("pga", float(t[2]))
             elif m == "setvref":
@@ -211,18 +230,60 @@ class FakeSerial:
             y = y - self.vref
         elif kind == "delay":
             y = np.clip(self.wave_at(t - self.mode[1]), 0, VREF) - self.vref
+        elif kind == "const":
+            y = np.full_like(x, self.mode[1]) - self.vref
+        elif kind == "osc":   # fixed frequency (k = 0) or VCO
+            freq = np.clip(self.mode[1] + self.mode[2] * u, 0, MODULE_FS / 2)
+            phase = np.cumsum(freq) / fs
+            y = self.mode[3] * wave(self.mode[4], phase)
+        elif kind == "am":    # (A + k u) carrier; A = 0: ring
+            y = (self.mode[2] + self.mode[3] * u) * wave(self.mode[4], self.mode[1] * t)
+        elif kind == "noise":
+            rng = np.random.default_rng(len(self.sent))
+            amp = self.mode[1]
+            if self.mode[2] == "pink":
+                spec = np.fft.rfft(rng.standard_normal(len(t)))
+                f = np.fft.rfftfreq(len(t), 1 / fs)
+                spec[1:] /= np.sqrt(f[1:] / f[1])
+                spec[0] = 0
+                y = np.fft.irfft(spec, len(t))
+                y = np.clip(y / y.std() * amp / 3, -amp, amp)
+            else:
+                y = rng.uniform(-amp, amp, len(t))
         elif kind == "envelope":
             y = -envelope(-u, self.mode[1] * 1e-6, fs) if self.mode[2] else envelope(u, self.mode[1] * 1e-6, fs)
         else:
             y = u
         if kind.startswith("comparator"):  # digital output: 0 V / VDD
             y = comparator(x, kind[10:], *self.mode[1:])
+        elif kind == "pwm":                # HIGH while the input is above the carrier
+            y = np.where(u > self.mode[2] * wave(self.mode[3], self.mode[1] * t), VREF, 0.0)
+        elif kind == "vf":                 # square at f0 + k u, HIGH at 0 Hz
+            freq = np.clip(self.mode[1] + self.mode[2] * u, 0, MODULE_FS / 2)
+            phase = np.cumsum(freq) / fs
+            y = np.where((phase % 1.0) < 0.5, VREF, 0.0)
         else:
             y = np.clip(self.vref + y, 0.1, VREF - 0.1)  # headroom of the module output
         x, y = x[warm:], y[warm:]
         codes = [np.clip(np.round(v / VREF * ADC_FULL), 0, ADC_FULL - 1) for v in (x, y)]
         data = np.column_stack(codes).astype("<u2").tobytes()
         return f"ok bin {len(data)} 2 {points} {fs:.3f}\n".encode() + data + b"end\n"
+
+
+WAVES = ("sine", "triangle", "square", "sawtooth")
+
+
+def wave(name, phase):
+    """Waveforms of the oscillator: 0 at phase 0 and rising (phase in periods)."""
+    ph = np.asarray(phase) % 1.0
+    if name == "triangle":
+        q = (ph + 0.25) % 1.0
+        return np.where(q < 0.5, 4 * q - 1, 3 - 4 * q)
+    if name == "square":
+        return np.where(ph < 0.5, 1.0, -1.0)
+    if name == "sawtooth":
+        return 2 * ((ph + 0.5) % 1.0) - 1
+    return np.sin(2 * np.pi * ph)
 
 
 def biquad(u, kind, fc, q, fs):
