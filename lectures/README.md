@@ -3,7 +3,7 @@
 Arduino UNO R4 を**測定器**(信号発生器と 2ch のオシロ)にして、Mimic に信号を入れ、入力と出力を Python のノートブックでグラフにしながら学びます。
 機材がなくても、GitHub でノートブックを開けば説明と結果のグラフを読めます。
 
-> 公開済みのモード(AnalogMimic 0.2)の講義はそろっています。新しいモードの講義は、モードの公開に合わせて足していきます。
+> Mimic のすべてのモードの講義がそろっています(0〜7 章)。Mimic を 2 台以上つなぐ講義は、これから足していきます。
 
 ## 必要なもの
 
@@ -32,7 +32,7 @@ A0 は二股にして、Mimic の AIN と A1 の両方につなぎます(ブレ�
 
 ### 1. 測定器のスケッチを書き込む(最初の 1 回だけ)
 
-1. Arduino IDE の Library Manager で **AnalogMimic**(0.2.0 以降)を入れる。
+1. Arduino IDE の Library Manager で **AnalogMimic**(0.2.1 以降)を入れる。
 2. [`firmware/MimicLab/MimicLab.ino`](firmware/MimicLab/) を開いて UNO R4 に書き込む。
 
 ### 2. Python の環境を作る
