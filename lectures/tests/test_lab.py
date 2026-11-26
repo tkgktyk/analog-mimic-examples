@@ -187,13 +187,16 @@ def test_live_frames(fake):
 
 
 def test_live_thread(fake):
+    import threading
     import time
     lab = MimicLab()
     lab.fg.sine(100, 1.0)
     live = lab.scope.live()           # thread and buttons (no kernel: the widgets do nothing)
-    deadline = time.monotonic() + 5
+    pause = threading.Event()         # time.sleep does nothing in the tests (conftest)
+    deadline = time.monotonic() + 10
     while fake[0].sent.count("scope capture 2000 1 free") < 3 and time.monotonic() < deadline:
         lab.fg.sine(100, 1.0)         # other commands while it runs (the lock)
+        pause.wait(0.01)              # the lock is not fair: let the thread take it (Windows)
     assert not live._status.value.startswith("Stopped"), live._status.value  # error in the thread
     assert fake[0].sent.count("scope capture 2000 1 free") >= 3
     live._scale_w.value = "auto"      # redraw with the last data
