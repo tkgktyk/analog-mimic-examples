@@ -19,13 +19,6 @@
 
 講義の始め方(Python の準備、測定器のスケッチの書きこみ、結線)は [`lectures/README.md`](lectures/README.md) にあります。機材がなくても、GitHub でノートブックを開けば、説明と実機で測った結果のグラフを読めます。
 
-## ライセンス
-
-| 対象 | ライセンス |
-|---|---|
-| スケッチ(.ino)、Python(.py、`schematic.py` を含む)、ノートブックのコードのセル | MIT([`LICENSE`](LICENSE)) |
-| README などの本文、ノートブックの説明文、図(SVG)、写真 | CC BY 4.0([`LICENSE-CC-BY-4.0`](LICENSE-CC-BY-4.0)) |
-
 ---
 
 ## English
