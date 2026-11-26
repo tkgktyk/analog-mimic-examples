@@ -29,7 +29,7 @@
 
 // ---- Settings -------------------------------------------------------------------------
 
-constexpr char VERSION[] = "0.1.4";
+constexpr char VERSION[] = "0.1.5";
 constexpr int PROTOCOL = 1;
 constexpr uint32_t BAUD = 1000000;   // ignored by the UNO R4 Minima (native USB); used by the WiFi
 constexpr float TICK_HZ = 20000.0f;  // DAC update and ADC sampling rate
@@ -407,6 +407,13 @@ const MimicMethod MIMIC_METHODS[] = {
   { "setPwmModulator", 2, 3, [](const float *a, int n) { n > 2 ? mimic.setPwmModulator(a[0], a[1], U8(a[2])) : mimic.setPwmModulator(a[0], a[1]); } },
   { "setVfConverter", 1, 2, [](const float *a, int n) { n > 1 ? mimic.setVfConverter(a[0], a[1]) : mimic.setVfConverter(a[0]); } },
   { "setNoise", 1, 2, [](const float *a, int n) { n > 1 ? mimic.setNoise(a[0], U8(a[1])) : mimic.setNoise(a[0]); } },
+  // Nonlinear: logarithm, multiplier, true RMS, dead zone (experimental in the library 0.2)
+  { "setLog", 0, 2, [](const float *a, int n) { n > 1 ? mimic.setLog(a[0], a[1]) : n > 0 ? mimic.setLog(a[0]) : mimic.setLog(); } },
+  { "setAntilog", 0, 2, [](const float *a, int n) { n > 1 ? mimic.setAntilog(a[0], a[1]) : n > 0 ? mimic.setAntilog(a[0]) : mimic.setAntilog(); } },
+  { "setSquarer", 0, 1, [](const float *a, int n) { n > 0 ? mimic.setSquarer(a[0]) : mimic.setSquarer(); } },
+  { "setSquareRooter", 0, 1, [](const float *a, int n) { n > 0 ? mimic.setSquareRooter(a[0]) : mimic.setSquareRooter(); } },
+  { "setTrueRms", 1, 1, [](const float *a, int) { mimic.setTrueRms(a[0]); } },
+  { "setDeadZone", 2, 2, [](const float *a, int) { mimic.setDeadZone(a[0], a[1]); } },
 };
 #undef U8
 #undef U16

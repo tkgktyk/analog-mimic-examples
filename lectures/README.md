@@ -74,5 +74,6 @@ jupyter lab
 | [4 時間の処理](04_time/) | [4-1 積分器](04_time/01_integrator.ipynb)、[4-2 微分器](04_time/02_differentiator.ipynb)、[4-3 サンプル&ホールド](04_time/03_sample_hold.ipynb)、[4-4 スルーレート](04_time/04_slew_rate.ipynb)、[4-5 遅延(むだ時間)](04_time/05_delay.ipynb) |
 | [5 非線形の回路](05_nonlinear/) | [5-1 比較器とシュミットトリガ](05_nonlinear/01_comparator.ipynb)、[5-2 ウィンドウ比較器](05_nonlinear/02_window.ipynb)、[5-3 クリッパ](05_nonlinear/03_clipper.ipynb)、[5-4 整流回路](05_nonlinear/04_rectifier.ipynb)、[5-5 ピークホールドとエンベロープ](05_nonlinear/05_peak_envelope.ipynb) |
 | [6 信号源と変調](06_source/) | [6-1 発振器と定電圧](06_source/01_oscillator.ipynb)、[6-2 VCO(電圧制御発振器)](06_source/02_vco.ipynb)、[6-3 ノイズ(雑音)](06_source/03_noise.ipynb)、[6-4 AM とリング変調](06_source/04_modulator.ipynb)、[6-5 PWM と V/F 変換](06_source/05_pwm_vf.ipynb) |
+| [7 演算する回路](07_math/) | [7-1 対数アンプと逆対数アンプ](07_math/01_log.ipynb)、[7-2 二乗回路と平方根回路](07_math/02_square.ipynb)、[7-3 実効値(True RMS)](07_math/03_rms.ipynb) |
 
 最初に 0 章(0-0、0-1)をやってください。

@@ -27,6 +27,7 @@ class FakeSerial:
         # ("bypass",), ("pga", gain), ("lpf" | "hpf" | "apf", fc), ("biquad", kind, fc, q)
         self.mode = ("bypass",)
         self.vref = VREF / 2
+        self.out_offset = 0.0
         # The buffer of the sketch: every notebook must fit it
         self.max_points = 2000
 
@@ -65,7 +66,7 @@ class FakeSerial:
     def answer(self, t):
         cmd = t[0].lower()
         if cmd == "id":
-            return (b"ok MimicLab proto=1 ver=0.1.4 fs=20000 dac=12 adc=14 maxpts=%d mimic=20261123 vref=5.000\n"
+            return (b"ok MimicLab proto=1 ver=0.1.5 fs=20000 dac=12 adc=14 maxpts=%d mimic=20261123 vref=5.000\n"
                     % self.max_points)
         if cmd == "fg":
             if len(t) == 1:
@@ -139,6 +140,19 @@ class FakeSerial:
                 self.mode = ("pga", float(t[2]))
             elif m == "setvref":
                 self.vref = float(t[2])
+            elif m == "setoutputoffset":
+                self.out_offset = float(t[2])
+            elif m == "setdecimation":
+                pass
+            elif m in ("setlog", "setantilog"):
+                self.mode = (m[3:], float(t[2]) if len(t) > 2 else 1.0, float(t[3]) if len(t) > 3 else 0.5)
+            elif m in ("setsquarer", "setsquarerooter"):
+                unit = float(t[2]) if len(t) > 2 else 0.0
+                self.mode = (m[3:], unit if unit > 0 else VREF / 4)
+            elif m == "settruerms":
+                self.mode = ("truerms", min(max(float(t[2]), 10.0), 10e6))
+            elif m == "setdeadzone":
+                self.mode = ("deadzone", float(t[2]), float(t[3]))
             elif m.startswith("set"):
                 self.mode = ("bypass",)
             elif m == "getinputvolts":
@@ -250,6 +264,22 @@ class FakeSerial:
                 y = np.clip(y / y.std() * amp / 3, -amp, amp)
             else:
                 y = rng.uniform(-amp, amp, len(t))
+        elif kind == "log":
+            y = self.mode[1] * np.log10(np.maximum(u, VREF / 32768) / self.mode[2])
+        elif kind in ("antilog", "squarer", "squarerooter", "truerms"):   # magnitudes from 0 V
+            if kind == "antilog":
+                mag = self.mode[2] * 10 ** np.clip(u / self.mode[1], -10, 10)
+            elif kind == "squarer":
+                mag = u * u / self.mode[1]
+            elif kind == "squarerooter":
+                mag = np.sqrt(np.maximum(u, 0) * self.mode[1])
+            else:
+                mag = np.sqrt(rms_average(u * u, self.mode[1] * 1e-6, fs))
+            y = mag - self.vref
+        elif kind == "deadzone":
+            lower = self.mode[2]
+            upper = max(self.mode[1], lower)   # an upper limit below the lower one is the lower one
+            y = np.where(x > upper, x - upper, np.where(x < lower, x - lower, 0.0))
         elif kind == "envelope":
             y = -envelope(-u, self.mode[1] * 1e-6, fs) if self.mode[2] else envelope(u, self.mode[1] * 1e-6, fs)
         else:
@@ -263,7 +293,7 @@ class FakeSerial:
             phase = np.cumsum(freq) / fs
             y = np.where((phase % 1.0) < 0.5, VREF, 0.0)
         else:
-            y = np.clip(self.vref + y, 0.1, VREF - 0.1)  # headroom of the module output
+            y = np.clip(self.vref + y + self.out_offset, 0.1, VREF - 0.1)  # headroom of the module output
         x, y = x[warm:], y[warm:]
         codes = [np.clip(np.round(v / VREF * ADC_FULL), 0, ADC_FULL - 1) for v in (x, y)]
         data = np.column_stack(codes).astype("<u2").tobytes()
@@ -328,6 +358,18 @@ def clip(x, upper, lower, soft=False):
     d = x - c
     y = c + d - 4 * d ** 3 / (27 * h * h)
     return np.where(d >= 1.5 * h, upper, np.where(d <= -1.5 * h, lower, y))
+
+
+def rms_average(sq, tau, fs):
+    """Mean square of the true RMS mode: first-order average with tau, settled at the
+    start (the generator of the fake is periodic)."""
+    a = 1 - np.exp(-1 / (fs * tau))
+    m = np.empty_like(sq)
+    acc = sq.mean()
+    for n, v in enumerate(sq):
+        acc += a * (v - acc)
+        m[n] = acc
+    return m
 
 
 def envelope(mag, tau, fs):

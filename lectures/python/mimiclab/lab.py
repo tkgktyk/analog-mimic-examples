@@ -547,6 +547,43 @@ class Mimic:
         amplitude / sqrt 3); "pink" falls by 3 dB per octave, rms amplitude / 3."""
         self.call("setNoise", amplitude, color)
 
+    # Nonlinear: logarithm, multiplier, true RMS, dead zone (experimental modes of the
+    # library 0.2: the sketch MimicLab 0.1.5 or later). The outputs of antilog, squarer,
+    # square rooter and true RMS are magnitudes from 0 V: lift them with output_offset().
+
+    def log(self, slope: float = 1.0, unit: float = 0.5):
+        """Logarithmic amplifier: Vref + slope x log10((input - Vref) / unit); slope in V
+        per decade (negative inverts). Inputs near or below Vref saturate low."""
+        self.call("setLog", slope, unit)
+
+    def antilog(self, slope: float = 1.0, unit: float = 0.5):
+        """Antilogarithmic (exponential) amplifier: unit x 10^((input - Vref) / slope),
+        from 0 V. slope = 1 / log10(2) = 3.32 V per decade doubles the output per volt."""
+        self.call("setAntilog", slope, unit)
+
+    def squarer(self, unit: float = 0.0):
+        """Squarer: (input - Vref)^2 / unit, from 0 V; unit 0 uses VDD / 4 (1.25 V)."""
+        self.call("setSquarer", unit)
+
+    def square_rooter(self, unit: float = 0.0):
+        """Square rooter: sqrt((input - Vref) x unit), from 0 V, 0 below Vref; unit 0
+        uses VDD / 4 (1.25 V)."""
+        self.call("setSquareRooter", unit)
+
+    def true_rms(self, averaging_time_us: float):
+        """True RMS-to-DC converter: sqrt(mean((input - Vref)^2)), from 0 V, averaged
+        with the time constant in us (10 us - 10 s). Use it without decimation."""
+        self.call("setTrueRms", averaging_time_us)
+
+    def dead_zone(self, upper: float, lower: float):
+        """Dead zone: Vref while the input is between lower and upper (V), and
+        Vref + (input - limit) beyond a limit (slope 1, no step)."""
+        self.call("setDeadZone", upper, lower)
+
+    def output_offset(self, volts: float):
+        """Adds volts to the output of every mode (0 by default)."""
+        self.call("setOutputOffset", volts)
+
     def vref(self, volts: float):
         """Reference voltage (signal ground) of the module, 2.5 V by default."""
         self.call("setVref", volts)

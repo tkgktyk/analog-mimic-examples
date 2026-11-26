@@ -257,3 +257,26 @@ def test_sources(fake):
     lab.mimic.noise(1.0, "pink")
     assert fake[0].sent[-1] == "mimic setNoise 1 pink"
     assert abs(lab.scope.capture(2000)[2].std() - 1 / 3) < 0.03
+
+
+def test_math_modes(fake):
+    lab = MimicLab()
+    lab.fg.dc(3.0)                                    # 0.5 V above Vref
+    lab.mimic.log(1.0, 0.05)                          # Vref + log10(10) = 3.5 V
+    assert fake[0].sent[-1] == "mimic setLog 1 0.05"
+    assert abs(lab.scope.capture(100)[2].mean() - 3.5) < 0.01
+    lab.mimic.antilog(1.0, 0.5)                       # 0.5 x 10^0.5 = 1.581 V
+    assert abs(lab.scope.capture(100)[2].mean() - 1.581) < 0.01
+    lab.mimic.square_rooter()                         # sqrt(0.5 x 1.25) = 0.791 V
+    assert fake[0].sent[-1] == "mimic setSquareRooter 0"
+    assert abs(lab.scope.capture(100)[2].mean() - 0.791) < 0.01
+    lab.fg.sine(100, 1.0)
+    lab.mimic.output_offset(0.5)
+    lab.mimic.squarer()                               # 0.5 + sin^2 / 1.25: mean 0.9 V
+    assert abs(lab.scope.capture(2000)[2].mean() - 0.9) < 0.01
+    lab.mimic.output_offset(0)
+    lab.mimic.true_rms(100000)                        # 0.707 V
+    assert abs(lab.scope.capture(2000)[2].mean() - 0.707) < 0.01
+    lab.mimic.dead_zone(3.0, 2.0)                     # Vref + (x - 3.0) above 3.0 V
+    t, ch1, ch2 = lab.scope.capture(2000)
+    assert abs(ch2.max() - 3.0) < 0.01 and abs(ch2.min() - 2.0) < 0.01
