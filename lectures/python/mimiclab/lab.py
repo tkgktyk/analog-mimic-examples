@@ -572,7 +572,7 @@ class Mimic:
 
     def true_rms(self, averaging_time_us: float):
         """True RMS-to-DC converter: sqrt(mean((input - Vref)^2)), from 0 V, averaged
-        with the time constant in us (10 us - 10 s). Use it without decimation."""
+        with the time constant in us (10 us - 10 s)."""
         self.call("setTrueRms", averaging_time_us)
 
     def dead_zone(self, upper: float, lower: float):
