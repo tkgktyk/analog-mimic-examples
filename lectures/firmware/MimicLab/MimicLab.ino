@@ -23,12 +23,13 @@
  * interrupt latency moves the sampling instants by a few microseconds).
  */
 #include <AnalogMimic.h>
+#include <AnalogMimicExperimental.h>  // modes of the next releases (lectures of chapter 4 and later)
 #include <FspTimer.h>
 #include <strings.h>
 
 // ---- Settings -------------------------------------------------------------------------
 
-constexpr char VERSION[] = "0.1.2";
+constexpr char VERSION[] = "0.1.3";
 constexpr int PROTOCOL = 1;
 constexpr uint32_t BAUD = 1000000;   // ignored by the UNO R4 Minima (native USB); used by the WiFi
 constexpr float TICK_HZ = 20000.0f;  // DAC update and ADC sampling rate
@@ -42,7 +43,7 @@ constexpr uint16_t MAX_POINTS = 2000;
 
 volatile uint16_t *const DAC_DATA = (uint16_t *)0x4005E000;  // DAC12 DADR0 (pin A0)
 
-Mimic0x mimic(MIMIC_VDD_5V);
+MimicExperimental<Mimic0x> mimic(MIMIC_VDD_5V);  // Mimic0x plus the experimental modes
 bool mimicReady = false;
 
 // ---- Function generator (DDS) -----------------------------------------------------------
@@ -352,6 +353,7 @@ struct MimicMethod {
 };
 
 #define U8(x) ((uint8_t)lroundf(x))
+#define U16(x) ((uint16_t)lroundf(x))
 const MimicMethod MIMIC_METHODS[] = {
   // Global settings
   { "setOutputOpen", 1, 1, [](const float *a, int) { mimic.setOutputOpen(a[0] != 0); } },
@@ -382,8 +384,14 @@ const MimicMethod MIMIC_METHODS[] = {
   { "setDifferentiator", 1, 2, [](const float *a, int n) { n > 1 ? mimic.setDifferentiator(a[0], a[1]) : mimic.setDifferentiator(a[0]); } },
   { "setRectifierHalf", 0, 1, [](const float *a, int n) { n > 0 ? mimic.setRectifierHalf(U8(a[0])) : mimic.setRectifierHalf(); } },
   { "setRectifierFull", 0, 1, [](const float *a, int n) { n > 0 ? mimic.setRectifierFull(U8(a[0])) : mimic.setRectifierFull(); } },
+  // Time: sample & hold, slew rate, delay (experimental in the library 0.2)
+  { "setSampleAndHold", 1, 1, [](const float *a, int) { mimic.setSampleAndHold(a[0]); } },
+  { "setTrackAndHold", 1, 2, [](const float *a, int n) { n > 1 ? mimic.setTrackAndHold(a[0], a[1]) : mimic.setTrackAndHold(a[0]); } },
+  { "setSlewRateLimiter", 1, 1, [](const float *a, int) { mimic.setSlewRateLimiter(a[0]); } },
+  { "setDigitalDelay", 1, 1, [](const float *a, int) { mimic.setDigitalDelay(U16(a[0])); } },
 };
 #undef U8
+#undef U16
 
 void cmdMimic() {
   if (numTokens < 2) { fail("usage: mimic <method> [args...]"); return; }

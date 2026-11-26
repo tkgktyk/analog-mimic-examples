@@ -479,6 +479,31 @@ class Mimic:
         settings change; switch to another mode (e.g. bypass()) to reset it."""
         self.call("setPeakHold", polarity)
 
+    # Time: sample & hold, slew rate, delay (experimental modes of the library 0.2:
+    # the sketch MimicLab 0.1.3 or later)
+
+    def sample_hold(self, freq: float):
+        """Sample and hold: takes the input once every 1 / freq s and holds it (a step
+        output). The period is a whole number of module samples (5 us). The held value
+        starts at mid-scale when the mode is selected."""
+        self.call("setSampleAndHold", freq)
+
+    def track_hold(self, freq: float, track_ratio: float = 0.5):
+        """Track and hold: follows the input for track_ratio of every period (1 / freq)
+        and holds the last value for the rest."""
+        self.call("setTrackAndHold", freq, track_ratio)
+
+    def slew_rate(self, slew_v_per_us: float):
+        """Slew rate limiter, like the slew rate of an op-amp: the output changes by at
+        most slew_v_per_us V/us (the step is VDD / 32768 per 5 us sample, about 0.03 V/ms
+        at 5 V). The output starts at mid-scale when the mode is selected."""
+        self.call("setSlewRateLimiter", slew_v_per_us)
+
+    def delay(self, samples: int):
+        """Delay line (dead time): output = input delayed by samples x 5 us
+        (0 - 4095 samples, up to 20.475 ms)."""
+        self.call("setDigitalDelay", int(round(samples)))
+
     def vref(self, volts: float):
         """Reference voltage (signal ground) of the module, 2.5 V by default."""
         self.call("setVref", volts)

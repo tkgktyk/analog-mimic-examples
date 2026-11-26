@@ -11,6 +11,7 @@ Good enough to run the notebooks, not a model of the module.
 import numpy as np
 
 FS = 20000.0
+MODULE_FS = 200000.0   # sampling rate of the module
 VREF = 5.0
 ADC_FULL = 1 << 14
 
@@ -64,7 +65,7 @@ class FakeSerial:
     def answer(self, t):
         cmd = t[0].lower()
         if cmd == "id":
-            return (b"ok MimicLab proto=1 ver=0.1.2 fs=20000 dac=12 adc=14 maxpts=%d mimic=20261123 vref=5.000\n"
+            return (b"ok MimicLab proto=1 ver=0.1.3 fs=20000 dac=12 adc=14 maxpts=%d mimic=20261123 vref=5.000\n"
                     % self.max_points)
         if cmd == "fg":
             if len(t) == 1:
@@ -103,6 +104,18 @@ class FakeSerial:
                 self.mode = ("envelope", float(t[2]), len(t) > 3 and t[3].lower().startswith("neg"))
             elif m == "setpeakhold":
                 self.mode = ("envelope", 0.0, len(t) > 2 and t[2].lower().startswith("neg"))
+            elif m in ("setsampleandhold", "settrackandhold"):
+                period = max(1, round(MODULE_FS / float(t[2])))       # module samples
+                ratio = float(t[3]) if len(t) > 3 else 0.5
+                track = 1 if m == "setsampleandhold" else max(1, int(period * min(max(ratio, 0.0), 1.0)))
+                self.mode = ("sh", period / MODULE_FS, track / MODULE_FS)
+            elif m == "setslewratelimiter":
+                step = round(float(t[2]) * 1e6 / MODULE_FS * 32768 / VREF)    # 1/8 LSB per sample
+                if float(t[2]) > 0:
+                    step = max(step, 1)
+                self.mode = ("slew", step * VREF / 32768 * MODULE_FS)        # V/s
+            elif m == "setdigitaldelay":
+                self.mode = ("delay", min(int(float(t[2])), 4095) / MODULE_FS)
             elif m == "setpga":
                 self.mode = ("pga", float(t[2]))
             elif m == "setvref":
@@ -141,7 +154,7 @@ class FakeSerial:
         kind = self.mode[0]
         # Start a whole number of periods early, so that a filter is settled at t = 0
         warm = 0
-        if kind in ("lpf", "hpf", "apf", "biquad", "integ", "diff", "envelope", "comparatorschmitt") and self.freq > 0:
+        if kind in ("lpf", "hpf", "apf", "biquad", "integ", "diff", "envelope", "comparatorschmitt", "slew") and self.freq > 0:
             if kind == "biquad":
                 tau = max(1.0, 2 * self.mode[3]) / (2 * np.pi * self.mode[2])
             elif kind == "integ":
@@ -152,6 +165,8 @@ class FakeSerial:
                 tau = self.mode[1] * 1e-6
             elif kind == "comparatorschmitt":
                 tau = 0.0
+            elif kind == "slew":
+                tau = VREF / max(self.mode[1], 1.0) / 10    # time to cross the whole range
             else:
                 tau = 1 / (2 * np.pi * self.mode[1])
             periods = int(np.ceil(10 * tau * self.freq)) + 1
@@ -181,6 +196,21 @@ class FakeSerial:
             y = np.minimum(u, 0) if self.mode[1] else np.maximum(u, 0)
         elif kind == "rectifierfull":
             y = -np.abs(u) if self.mode[1] else np.abs(u)
+        elif kind == "sh":   # track for the first part of every period, then hold
+            period, track = self.mode[1], self.mode[2]
+            start = np.floor(t / period) * period
+            held = np.clip(self.wave_at(start + track), 0, VREF)
+            y = np.where(t - start < track, x, held) - self.vref
+        elif kind == "slew":
+            step = self.mode[1] / fs
+            y = np.empty_like(x)
+            out = VREF / 2   # starts at mid-scale
+            for n, v in enumerate(x):
+                out += min(max(v - out, -step), step)
+                y[n] = out
+            y = y - self.vref
+        elif kind == "delay":
+            y = np.clip(self.wave_at(t - self.mode[1]), 0, VREF) - self.vref
         elif kind == "envelope":
             y = -envelope(-u, self.mode[1] * 1e-6, fs) if self.mode[2] else envelope(u, self.mode[1] * 1e-6, fs)
         else:

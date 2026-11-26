@@ -206,3 +206,23 @@ def test_live_thread(fake):
     live2 = lab.scope.live(scale="auto")
     lab.close()                       # stops the live scope
     assert not live2._thread.is_alive()
+
+
+def test_time_modes(fake):
+    lab = MimicLab()
+    lab.fg.sine(50, 1.0)
+    lab.mimic.sample_hold(500)
+    assert fake[0].sent[-1] == "mimic setSampleAndHold 500"
+    t, ch1, ch2 = lab.scope.capture(2000)
+    steps = np.flatnonzero(np.abs(np.diff(ch2)) > 0.02)
+    assert abs(np.median(np.diff(t[steps])) - 0.002) < 1e-4       # one step every 2 ms
+    lab.mimic.track_hold(200, 0.5)
+    assert fake[0].sent[-1] == "mimic setTrackAndHold 200 0.5"
+    lab.fg.square(50, 1.0)
+    lab.mimic.slew_rate(0.001)                                      # 1 V/ms
+    t, ch1, ch2 = lab.scope.capture(2000)
+    assert 0.9e3 < np.max(np.abs(np.diff(ch2))) * 20000 < 1.1e3   # V/s
+    lab.mimic.delay(1000)                                           # 5 ms
+    assert fake[0].sent[-1] == "mimic setDigitalDelay 1000"
+    t, ch1, ch2 = lab.scope.capture(2000)
+    assert np.mean(np.abs(ch2[100:] - ch1[:-100]) < 0.01) > 0.99   # 100 points later (but the edges)
