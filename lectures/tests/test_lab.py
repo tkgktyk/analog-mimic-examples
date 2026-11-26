@@ -194,6 +194,7 @@ def test_live_thread(fake):
     deadline = time.monotonic() + 5
     while fake[0].sent.count("scope capture 2000 1 free") < 3 and time.monotonic() < deadline:
         lab.fg.sine(100, 1.0)         # other commands while it runs (the lock)
+    assert not live._status.value.startswith("Stopped"), live._status.value  # error in the thread
     assert fake[0].sent.count("scope capture 2000 1 free") >= 3
     live._scale_w.value = "auto"      # redraw with the last data
     live._mode_w.value = "single"

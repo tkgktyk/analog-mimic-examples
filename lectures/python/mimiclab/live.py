@@ -97,8 +97,8 @@ class LiveScope:
 
     def _capture(self):
         self.data = self._lab.scope.capture(self.points, fs=self.fs, sync=False)
-        now = time.monotonic()
-        if self._last is not None:
+        now = time.perf_counter()  # fine steps (time.monotonic() is about 16 ms on Windows)
+        if self._last is not None and now > self._last:
             r = 1 / (now - self._last)
             self.rate = r if self.rate is None else 0.7 * self.rate + 0.3 * r
         self._last = now
